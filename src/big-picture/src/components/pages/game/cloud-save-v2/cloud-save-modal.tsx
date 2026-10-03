@@ -18,6 +18,7 @@ import {
   getCloudSavePanelAction,
   getCloudSavePartialDescriptionKey,
   getCloudSavePresentation,
+  getCloudSaveProviderLabelKey,
   shouldShowCloudSaveEmptySnapshot,
 } from "@renderer/pages/game-details/cloud-save-v2/cloud-save-presentation";
 import {
@@ -509,6 +510,11 @@ export function BigPictureCloudSavePanel({
                 {t(presentation.labelKey)}
               </span>
             </div>
+            {overview && (
+              <p className="big-picture-cloud-save__storage-provider">
+                {t(getCloudSaveProviderLabelKey(overview.provider))}
+              </p>
+            )}
             <div className="big-picture-cloud-save__metadata">
               {overview?.state === "conflict" ? (
                 <div className="big-picture-cloud-save__snapshot-versions">
@@ -548,6 +554,11 @@ export function BigPictureCloudSavePanel({
                 {t("cloud_save_v2_not_created")}
               </span>
             </div>
+            {overview && (
+              <p className="big-picture-cloud-save__storage-provider">
+                {t(getCloudSaveProviderLabelKey(overview.provider))}
+              </p>
+            )}
             <p className="big-picture-cloud-save__empty-copy">
               {t("cloud_save_v2_no_cloud_saves_description")}
             </p>

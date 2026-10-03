@@ -56,6 +56,7 @@ export const INTERVALS = {
   seedStatusWatcher: 2_000,
   updateChecker: 60_000 * 50, // 50 minutes
   powerSaveBlockerSync: 20_000,
+  cloudSaveBackgroundSweep: 60_000, // tick; the sweep itself honours its own interval
 };
 
 export const DEFAULT_ACHIEVEMENT_SOUND_VOLUME = 0.15;

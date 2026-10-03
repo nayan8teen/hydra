@@ -367,6 +367,7 @@ export interface RetroArchLegacyBatteryCandidate {
 }
 
 export interface CloudSaveOverview extends CloudSaveStateResult {
+  provider?: CloudSaveRemoteProvider;
   localSnapshotSummary: {
     updatedAt: string | null;
     totalSizeBytes: number;
@@ -477,7 +478,8 @@ export type CloudSaveSyncTrigger =
   | "game-page-open"
   | "custom-path-rebind"
   | "pre-launch"
-  | "post-exit";
+  | "post-exit"
+  | "background-sweep";
 
 export type CloudSaveSyncAction =
   | "none"
@@ -549,6 +551,24 @@ export interface CloudSaveSyncProgressPayload {
 export interface CloudSaveSyncIpcProgressPayload
   extends CloudSaveSyncProgressPayload {
   operationId: string;
+}
+
+export interface CloudSaveBulkSyncProgress {
+  processed: number;
+  total: number;
+  synced: number;
+  skipped: number;
+  failed: number;
+  conflicts: number;
+  currentLabel: string | null;
+}
+
+export interface CloudSaveBulkSyncResult {
+  total: number;
+  synced: number;
+  skipped: number;
+  failed: number;
+  conflicts: number;
 }
 
 export interface ResolveRestoreTargetsInput

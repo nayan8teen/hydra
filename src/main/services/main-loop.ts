@@ -5,6 +5,7 @@ import { AchievementWatcherManager } from "./achievements/achievement-watcher-ma
 import { UpdateManager } from "./update-manager";
 import { INTERVALS } from "@main/constants";
 import { PowerSaveBlockerManager } from "./power-save-blocker";
+import { runBackgroundCloudSaveSweepTick } from "./cloud-save/background-sweep";
 import { logger } from "./logger";
 
 const wrapInLoop = (fn: () => unknown, interval: number) => {
@@ -37,6 +38,10 @@ export const startMainLoop = async () => {
     INTERVALS.seedStatusWatcher
   );
   wrapInLoop(() => UpdateManager.checkForUpdates(), INTERVALS.updateChecker);
+  wrapInLoop(
+    () => runBackgroundCloudSaveSweepTick(),
+    INTERVALS.cloudSaveBackgroundSweep
+  );
 
   wrapInLoop(() => {
     PowerSaveBlockerManager.syncState({

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LinkExternalIcon, PersonIcon } from "@primer/octicons-react";
+import { LinkExternalIcon, PersonIcon, SyncIcon } from "@primer/octicons-react";
 import { isValidGoogleDriveClientId } from "@shared";
 import { Button, CheckboxField, Modal, TextField } from "@renderer/components";
 import { useToast } from "@renderer/hooks";
+import { useCloudSaveBulkSync } from "@renderer/hooks/use-cloud-save-bulk-sync";
 import { logger } from "@renderer/logger";
 import type { GoogleDriveConnectionStatus, GoogleDriveSettings } from "@types";
 import GoogleDriveLogo from "@renderer/assets/google-drive-logo.svg?react";
@@ -17,6 +18,7 @@ import {
   getGoogleDriveConnectErrorMessageKey,
   getGoogleDriveIntegrationPresentation,
 } from "./settings-google-drive-state";
+import { getCloudSaveSyncAllPresentation } from "./settings-cloud-save-sync-progress";
 
 import "./settings-google-drive.scss";
 
@@ -38,11 +40,22 @@ export function SettingsGoogleDrive() {
   const [hasConnectFailed, setHasConnectFailed] = useState(false);
   const [clientIdDraft, setClientIdDraft] = useState("");
   const [folderDraft, setFolderDraft] = useState("");
+  const [sweepIntervalDraft, setSweepIntervalDraft] = useState("");
   const [avatarError, setAvatarError] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [deleteRemoteData, setDeleteRemoteData] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const didInitializeDrafts = useRef(false);
+  const {
+    progress: syncAllProgress,
+    isRunning: isSyncAllRunning,
+    runSyncAll,
+  } = useCloudSaveBulkSync();
+
+  const syncAllPresentation = getCloudSaveSyncAllPresentation(
+    syncAllProgress,
+    isSyncAllRunning
+  );
 
   const presentation = getGoogleDriveIntegrationPresentation({
     status,
@@ -71,6 +84,9 @@ export function SettingsGoogleDrive() {
         didInitializeDrafts.current = true;
         setClientIdDraft(next.settings.clientId ?? "");
         setFolderDraft(next.settings.folderName);
+        setSweepIntervalDraft(
+          String(next.settings.backgroundSweepIntervalMinutes)
+        );
       }
 
       if (next.state !== "disconnected") setHasConnectFailed(false);
@@ -194,6 +210,52 @@ export function SettingsGoogleDrive() {
     }
   };
 
+  const handleSweepToggle = async (enabled: boolean) => {
+    try {
+      await saveSettings({ backgroundSweepEnabled: enabled });
+    } catch (error) {
+      logger.error(error);
+      showErrorToast(t("google_drive_settings_error"));
+    }
+  };
+
+  const handleSweepIntervalBlur = async () => {
+    const minutes = Number.parseInt(sweepIntervalDraft, 10);
+    if (!Number.isFinite(minutes)) {
+      setSweepIntervalDraft(
+        String(status?.settings.backgroundSweepIntervalMinutes ?? "")
+      );
+      return;
+    }
+
+    try {
+      const settings = await saveSettings({
+        backgroundSweepIntervalMinutes: minutes,
+      });
+      setSweepIntervalDraft(String(settings.backgroundSweepIntervalMinutes));
+    } catch (error) {
+      logger.error(error);
+      showErrorToast(t("google_drive_settings_error"));
+    }
+  };
+
+  const handleSyncAll = async () => {
+    const result = await runSyncAll();
+
+    if (!result || result.failed > 0) {
+      showErrorToast(t("google_drive_sync_all_failed"));
+      return;
+    }
+
+    showSuccessToast(
+      t("google_drive_sync_all_done", {
+        synced: result.synced,
+        skipped: result.skipped,
+        conflicts: result.conflicts,
+      })
+    );
+  };
+
   const handleDisconnect = async () => {
     setShowDisconnectModal(false);
     setIsDisconnecting(true);
@@ -279,6 +341,81 @@ export function SettingsGoogleDrive() {
               onChange={(event) => setFolderDraft(event.target.value)}
               onBlur={() => void handleFolderBlur()}
             />
+
+            <CheckboxField
+              label={t("google_drive_background_sweep_label")}
+              checked={status?.settings.backgroundSweepEnabled === true}
+              disabled={
+                isSaving ||
+                isDisconnecting ||
+                status?.settings.driveSyncEnabled !== true
+              }
+              onChange={() =>
+                void handleSweepToggle(
+                  status?.settings.backgroundSweepEnabled !== true
+                )
+              }
+            />
+
+            {status?.settings.driveSyncEnabled === true &&
+              status?.settings.backgroundSweepEnabled === true && (
+                <TextField
+                  label={t("google_drive_sweep_interval_label")}
+                  hint={t("google_drive_sweep_interval_hint")}
+                  value={sweepIntervalDraft}
+                  disabled={isSaving || isDisconnecting}
+                  onChange={(event) =>
+                    setSweepIntervalDraft(event.target.value)
+                  }
+                  onBlur={() => void handleSweepIntervalBlur()}
+                />
+              )}
+          </div>
+
+          <div className="settings-google-drive__sync-all">
+            <Button
+              theme="outline"
+              onClick={() => void handleSyncAll()}
+              disabled={isSaving || isDisconnecting || isSyncAllRunning}
+            >
+              <SyncIcon size={STATUS_ICON_SIZE} />
+              {t("google_drive_sync_all_action")}
+            </Button>
+
+            {syncAllPresentation.isVisible && (
+              <div
+                className="settings-integration-card__progress"
+                role="status"
+              >
+                <div className="settings-integration-card__progress-header">
+                  <span>
+                    {t("google_drive_sync_all_progress", {
+                      processed: syncAllPresentation.processed,
+                      total: syncAllPresentation.total,
+                    })}
+                  </span>
+                  {syncAllPresentation.currentLabel && (
+                    <span className="settings-integration-card__progress-count">
+                      {syncAllPresentation.currentLabel}
+                    </span>
+                  )}
+                </div>
+                <div className="settings-integration-card__progress-track">
+                  <div
+                    className={`settings-integration-card__progress-fill ${
+                      syncAllPresentation.percent === null
+                        ? "settings-integration-card__progress-fill--indeterminate"
+                        : "settings-integration-card__progress-fill--determinate"
+                    }`}
+                    style={
+                      syncAllPresentation.percent === null
+                        ? undefined
+                        : { width: `${syncAllPresentation.percent}%` }
+                    }
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </>
       );

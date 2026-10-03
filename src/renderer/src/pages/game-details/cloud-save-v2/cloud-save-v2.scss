@@ -403,6 +403,13 @@
     font-size: globals.$small-font-size;
   }
 
+  &__storage-provider {
+    display: block;
+    margin-top: calc(globals.$spacing-unit / 4);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: globals.$small-font-size;
+  }
+
   &__snapshot-versions {
     display: flex;
     flex-direction: column;

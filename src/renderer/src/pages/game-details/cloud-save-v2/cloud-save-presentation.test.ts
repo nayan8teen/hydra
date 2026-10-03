@@ -11,6 +11,7 @@ const {
   getCloudSavePanelAction,
   getCloudSavePartialDescriptionKey,
   getCloudSavePresentation,
+  getCloudSaveProviderLabelKey,
   getCloudSaveSnapshotPanelMode,
   getCloudSaveSyncErrorKind,
   getCloudSaveUploadLimitError,
@@ -81,6 +82,26 @@ const fileDetails = (
     unresolvedRemoteVariantCount: 0,
     ...overrides,
   }) as CloudSaveV2FileDetails;
+
+describe("cloud save storage provider label", () => {
+  it("names the Google Drive backend when it owns the snapshot", () => {
+    assert.equal(
+      getCloudSaveProviderLabelKey("google-drive"),
+      "cloud_save_v2_storage_google_drive"
+    );
+  });
+
+  it("falls back to Hydra for the default backend", () => {
+    assert.equal(
+      getCloudSaveProviderLabelKey("hydra"),
+      "cloud_save_v2_storage_hydra"
+    );
+    assert.equal(
+      getCloudSaveProviderLabelKey(undefined),
+      "cloud_save_v2_storage_hydra"
+    );
+  });
+});
 
 describe("cloud save deletion availability", () => {
   it("supports remote-only, local-only and custom-path-only states", () => {
