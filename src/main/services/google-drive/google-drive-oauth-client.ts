@@ -56,19 +56,27 @@ export class GoogleDriveOAuthClient {
     code: string;
     codeVerifier: string;
     redirectUri: string;
+    /** Required for "Web application" clients; omitted for PKCE-only desktop ones. */
+    clientSecret?: string | null;
   }): Promise<GoogleDriveAuthorizationTokens> {
     let data: GoogleDriveTokenResponse;
 
     try {
+      const body = new URLSearchParams({
+        code: params.code,
+        client_id: params.clientId,
+        code_verifier: params.codeVerifier,
+        grant_type: "authorization_code",
+        redirect_uri: params.redirectUri,
+      });
+      const clientSecret = params.clientSecret?.trim();
+      if (clientSecret) {
+        body.set("client_secret", clientSecret);
+      }
+
       const response = await axios.post<GoogleDriveTokenResponse>(
         this.tokenUrl,
-        new URLSearchParams({
-          code: params.code,
-          client_id: params.clientId,
-          code_verifier: params.codeVerifier,
-          grant_type: "authorization_code",
-          redirect_uri: params.redirectUri,
-        }).toString(),
+        body.toString(),
         { headers: FORM_HEADERS, timeout: GOOGLE_DRIVE_REQUEST_TIMEOUT_MS }
       );
       data = response.data;

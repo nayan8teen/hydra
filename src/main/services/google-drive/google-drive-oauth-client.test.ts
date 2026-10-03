@@ -142,6 +142,65 @@ describe("google drive oauth client", () => {
     }
   });
 
+  it("sends the configured client secret for Web application clients", async () => {
+    const fake = await startFakeOAuth(
+      onTokenPath(() => ({
+        status: 200,
+        body: {
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_in: 1800,
+          scope: "https://www.googleapis.com/auth/drive.file",
+        },
+      }))
+    );
+
+    try {
+      const client = new GoogleDriveOAuthClient(fake.endpoints);
+      await client.exchangeAuthorizationCode({
+        ...exchangeParams,
+        clientSecret: "GOCSPX-example-secret",
+      });
+
+      const [request] = fake.requests;
+      assert.equal(
+        request.params.get("client_secret"),
+        "GOCSPX-example-secret"
+      );
+      // PKCE stays in place alongside the secret.
+      assert.equal(
+        request.params.get("code_verifier"),
+        exchangeParams.codeVerifier
+      );
+    } finally {
+      await fake.close();
+    }
+  });
+
+  it("ignores a blank client secret", async () => {
+    const fake = await startFakeOAuth(
+      onTokenPath(() => ({
+        status: 200,
+        body: {
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+        },
+      }))
+    );
+
+    try {
+      const client = new GoogleDriveOAuthClient(fake.endpoints);
+      await client.exchangeAuthorizationCode({
+        ...exchangeParams,
+        clientSecret: "   ",
+      });
+
+      assert.equal(fake.requests[0].params.get("client_secret"), null);
+    } finally {
+      await fake.close();
+    }
+  });
+
   it("names a client Google refuses and keeps its description", async () => {
     const fake = await startFakeOAuth(
       onTokenPath(() => ({

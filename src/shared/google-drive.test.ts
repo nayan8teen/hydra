@@ -10,6 +10,7 @@ import {
   getGoogleDriveErrorDetail,
   getGoogleDriveErrorMarker,
   isValidGoogleDriveClientId,
+  isValidGoogleDriveClientSecret,
 } from "./google-drive.js";
 
 describe("google drive client id validation", () => {
@@ -43,6 +44,40 @@ describe("google drive client id validation", () => {
     for (const candidate of rejected) {
       assert.equal(isValidGoogleDriveClientId(candidate), false);
     }
+  });
+});
+
+describe("google drive client secret validation", () => {
+  it("accepts Google-style secrets, trimmed", () => {
+    assert.equal(
+      isValidGoogleDriveClientSecret("GOCSPX-abcdefghijklmnopqrstuv"),
+      true
+    );
+    assert.equal(
+      isValidGoogleDriveClientSecret("  GOCSPX-abcdefghijklmnopqrstuv  "),
+      true
+    );
+  });
+
+  it("rejects empty, short, spaced or oversized values", () => {
+    const rejected: unknown[] = [
+      "",
+      "     ",
+      "short",
+      "spaced out secret",
+      "a".repeat(513),
+      42,
+      null,
+      undefined,
+    ];
+
+    for (const candidate of rejected) {
+      assert.equal(isValidGoogleDriveClientSecret(candidate), false);
+    }
+  });
+
+  it("accepts values up to the maximum length", () => {
+    assert.equal(isValidGoogleDriveClientSecret("a".repeat(512)), true);
   });
 });
 
