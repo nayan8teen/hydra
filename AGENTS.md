@@ -99,16 +99,33 @@ skip or weaken them.
 
 ## Git & PRs
 
-- **Always start new work on a fresh branch created from `origin/main`
-  (`git fetch origin && git checkout -b <branch> origin/main`), never from
-  another feature branch.** Branching from a feature branch leaves the PR
-  carrying that branch's unmerged commits and creates squash/merge conflicts
-  when the upstream PR lands (this exact problem cost a conflict-resolution
-  pass once already).
+### Branch discipline (strictly enforced — no exceptions)
+
+- **Before making any edit, run `git fetch origin && git branch
+--show-current`.** Work may only happen on a branch **just created from
+  `origin/main` for this task** (`git checkout -b <branch> origin/main`) —
+  never on `main` itself and never on another feature branch, no matter how
+  small or related the change is. One-line fixes, diagnostic changes, log
+  tweaks, and "quick experiments" are **not** exceptions.
+- **Being on an existing feature branch is never a valid base**, even when the
+  task looks related to that branch's work. If changes were already made on the
+  wrong branch, move them before doing anything else:
+  `git stash push -- <files>` → `git checkout -b <branch> origin/main` →
+  `git stash pop`. Do not commit on the wrong branch and do not "clean it up
+  later".
+- Branching from a feature branch leaves the PR carrying that branch's
+  unmerged commits and creates squash/merge conflicts when the upstream PR
+  lands (this exact problem cost a conflict-resolution pass once already, and
+  a second time on the Google Drive v3 etag fix).
 - If you find yourself already on an existing feature branch and the task's
   relationship to that work is ambiguous, **ask the user** whether to continue
   on the current branch or start a new branch (and PR) from `main` — do not
-  silently pick one.
+  silently pick one. Ambiguity about the _base_ is resolved by the user,
+  never by the agent; ambiguity about the _rule_ does not exist — the rule
+  always applies.
+
+### PR mechanics
+
 - `origin` is the fork `git@github.com:nayan8teen/hydra.git`; `upstream` is
   `hydralauncher/hydra`. Feature branches live on the fork and PRs target the
   fork's own `main` (`gh pr create --repo nayan8teen/hydra --base main`).
