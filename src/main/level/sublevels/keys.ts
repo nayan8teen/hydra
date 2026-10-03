@@ -51,4 +51,5 @@ export const levelKeys = {
   steamSyncRun: "steamSyncRun",
   googleDriveAuth: "google-drive-auth",
   googleDriveSettings: "google-drive-settings",
+  googleDriveClientRejection: "google-drive-client-rejection",
 };
