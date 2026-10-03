@@ -62,16 +62,23 @@ const isPendingDeletionBlockingAutomaticSync = async (
     return true;
   });
 
-export const canRunAutomaticCloudSaveSync = async (
+interface CanRunCloudSaveSyncOptions {
+  /** Automatic syncs also honour the per-game automatic sync setting. */
+  requireAutomaticSyncEnabled: boolean;
+}
+
+const canRunCloudSaveSync = async (
   objectId: string,
-  shop: GameShop
+  shop: GameShop,
+  options: CanRunCloudSaveSyncOptions
 ) => {
   if (
     !(await canAccessCloudSaveRemote(
       await resolveCloudSaveProvider(objectId, shop)
     )) ||
     (await isPendingDeletionBlockingAutomaticSync(objectId, shop)) ||
-    !(await getCloudSaveAutomaticSyncEnabled(objectId, shop))
+    (options.requireAutomaticSyncEnabled &&
+      !(await getCloudSaveAutomaticSyncEnabled(objectId, shop)))
   ) {
     return false;
   }
@@ -105,7 +112,20 @@ export const canRunAutomaticCloudSaveSync = async (
   return true;
 };
 
+export const canRunAutomaticCloudSaveSync = (
+  objectId: string,
+  shop: GameShop
+) => canRunCloudSaveSync(objectId, shop, { requireAutomaticSyncEnabled: true });
+
+/** Manual bulk syncs run regardless of the per-game automatic sync toggle. */
+export const canRunManualCloudSaveSync = (objectId: string, shop: GameShop) =>
+  canRunCloudSaveSync(objectId, shop, { requireAutomaticSyncEnabled: false });
+
 const emitAutomaticSyncEvent = (event: CloudSaveAutomaticSyncEvent) => {
+  // Background sweeps are silent: the user did not ask for this run and it
+  // must not interrupt whatever they are doing in the app.
+  if (event.trigger === "background-sweep") return;
+
   WindowManager.sendToAppWindows("on-cloud-save-automatic-sync", event);
 };
 

@@ -50,6 +50,8 @@ import type {
   GameLauncherStatusPayload,
   CloudSaveAutomaticSyncModeChangedEvent,
   CloudSaveAutomaticSyncEvent,
+  CloudSaveBulkSyncProgress,
+  CloudSaveBulkSyncResult,
   CloudSaveConflictResolution,
   CloudSaveOverview,
   RetroArchLocalBatteryCandidate,
@@ -170,6 +172,21 @@ contextBridge.exposeInMainWorld("electron", {
       objectId,
       shop
     ) as Promise<CloudSaveOverview>,
+  syncAllCloudSaves: () =>
+    ipcRenderer.invoke("syncAllCloudSaves") as Promise<CloudSaveBulkSyncResult>,
+  getActiveCloudSaveBulkSync: () =>
+    ipcRenderer.invoke(
+      "getActiveCloudSaveBulkSync"
+    ) as Promise<CloudSaveBulkSyncProgress | null>,
+  onCloudSaveBulkSyncProgress: (
+    callback: (progress: CloudSaveBulkSyncProgress) => void
+  ) => {
+    const channel = "on-cloud-save-bulk-sync-progress";
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown) =>
+      callback(payload as CloudSaveBulkSyncProgress);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
   getGoogleDriveStatus: () =>
     ipcRenderer.invoke(
       "getGoogleDriveStatus"

@@ -33,6 +33,7 @@ import {
   getCloudSaveOperationPresentation,
   getCloudSavePartialDescriptionKey,
   getCloudSavePresentation,
+  getCloudSaveProviderLabelKey,
   getCloudSaveSnapshotPanelMode,
   type CloudSavePanelAction,
   shouldShowCloudSaveEmptySnapshot,
@@ -263,6 +264,9 @@ export function CloudSavePanel({
     ),
   });
   const activeSnapshot = overview?.activeRemoteSnapshot ?? null;
+  const providerLabel = overview
+    ? t(getCloudSaveProviderLabelKey(overview.provider))
+    : null;
   const showEmptySnapshot = shouldShowCloudSaveEmptySnapshot({
     overview,
     isLoading,
@@ -417,6 +421,11 @@ export function CloudSavePanel({
             {t(presentation.labelKey)}
           </span>
         </div>
+        {providerLabel && (
+          <span className="cloud-save-v2__storage-provider">
+            {providerLabel}
+          </span>
+        )}
         {snapshotMetadata(
           activeSnapshot.updatedAt,
           activeSnapshot.fileCount,
@@ -434,6 +443,11 @@ export function CloudSavePanel({
             {t("cloud_save_v2_not_created")}
           </span>
         </div>
+        {providerLabel && (
+          <span className="cloud-save-v2__storage-provider">
+            {providerLabel}
+          </span>
+        )}
         <div className="cloud-save-v2__snapshot-metadata">
           <span>{t("cloud_save_v2_no_cloud_saves_description")}</span>
           <button

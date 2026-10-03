@@ -16,6 +16,10 @@ describe("cloud save automatic sync policy", () => {
     assert.equal(getSyncDirection("game-page-open"), "bidirectional");
   });
 
+  it("syncs bidirectionally in the background sweep", () => {
+    assert.equal(getSyncDirection("background-sweep"), "bidirectional");
+  });
+
   it("keeps pre-launch restore-only and post-exit upload-only", () => {
     assert.equal(getSyncDirection("pre-launch"), "restore-only");
     assert.equal(getSyncDirection("custom-path-rebind"), "restore-only");

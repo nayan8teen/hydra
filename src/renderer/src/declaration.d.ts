@@ -78,6 +78,8 @@ import type {
   GameLauncherStatusPayload,
   CloudSaveAutomaticSyncModeChangedEvent,
   CloudSaveAutomaticSyncEvent,
+  CloudSaveBulkSyncProgress,
+  CloudSaveBulkSyncResult,
   CloudSaveConflictResolution,
   RetroArchLocalBatteryCandidate,
   RetroArchLegacyBatteryCandidate,
@@ -148,6 +150,11 @@ declare global {
       objectId: string,
       shop: GameShop
     ) => Promise<CloudSaveOverview>;
+    syncAllCloudSaves: () => Promise<CloudSaveBulkSyncResult>;
+    getActiveCloudSaveBulkSync: () => Promise<CloudSaveBulkSyncProgress | null>;
+    onCloudSaveBulkSyncProgress: (
+      callback: (progress: CloudSaveBulkSyncProgress) => void
+    ) => () => void;
     getGoogleDriveStatus: () => Promise<GoogleDriveConnectionStatus>;
     setGoogleDriveSettings: (
       patch: Partial<GoogleDriveSettings>
