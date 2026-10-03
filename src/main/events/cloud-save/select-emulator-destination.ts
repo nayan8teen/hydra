@@ -2,7 +2,7 @@ import { BrowserWindow, dialog } from "electron";
 
 import {
   assertCloudSaveDeletionInactive,
-  assertCloudSaveSubscription,
+  assertCloudSaveDriveConnected,
   isCloudSaveSyncActive,
 } from "@main/services/cloud-save";
 import { analyzeCloudSaveState } from "@main/services/cloud-save/analyze-cloud-save-state";
@@ -34,7 +34,7 @@ registerEvent(
     rawPath: string,
     kind: EmulatorDestinationKind
   ) => {
-    assertCloudSaveSubscription();
+    await assertCloudSaveDriveConnected();
     if (kind !== "save" && kind !== "state") {
       throw new Error("cloud_save_emulator_destination_invalid");
     }

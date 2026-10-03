@@ -5,7 +5,7 @@ import { gamesSublevel, levelKeys } from "@main/level";
 import type { GameShop } from "@types";
 
 import { isGameRunning } from "../game-running-state";
-import { assertCloudSaveSubscription } from "./cloud-save-access";
+import { assertCloudSaveDriveConnected } from "./cloud-save-access";
 import { getEmulatorSaveProvider } from "./emulator-save-provider";
 import { listRemoteGameSnapshots } from "./list-remote-game-snapshots";
 import {
@@ -21,7 +21,7 @@ export const bindRpcs3CloudSaveProfile = async (
   shop: GameShop,
   cloudProfileId: string
 ) => {
-  assertCloudSaveSubscription();
+  await assertCloudSaveDriveConnected();
   return cloudSaveOperationGate.runSync(
     cloudSaveOperationScopeKey(objectId, shop),
     "bind-rpcs3-profile",

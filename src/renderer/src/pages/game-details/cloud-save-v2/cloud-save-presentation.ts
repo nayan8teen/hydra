@@ -238,7 +238,7 @@ export const getCloudSavePresentation = ({
 }: CloudSavePresentationInput): CloudSavePresentation => {
   if (!canUseCloudSaves || !hasExecutablePath) {
     return {
-      labelKey: "cloud_save",
+      labelKey: "cloud_save_google_drive",
       icon: "cloud-slash",
       tone: "neutral",
     };
@@ -305,7 +305,7 @@ export const getCloudSavePresentation = ({
     case "untracked":
     default:
       return {
-        labelKey: "cloud_save",
+        labelKey: "cloud_save_google_drive",
         icon: "cloud",
         tone: "neutral",
       };

@@ -76,7 +76,7 @@ describe("game options category selection", () => {
   it("falls back when cloud access is lost", () => {
     assert.equal(
       getAvailableGameSettingsCategory("hydra_cloud", {
-        cloudSaveAccessAction: "paywall",
+        cloudSaveAccessAction: "connect-drive",
         showCloudSaveV2Settings: true,
         showLegacyCloudSaveSettings: true,
         showDownloadSettings: true,

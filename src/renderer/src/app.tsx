@@ -40,9 +40,7 @@ import {
 } from "@renderer/features";
 import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useSubscription } from "./hooks/use-subscription";
 import { ArchiveDeletionModal } from "./pages/downloads/archive-deletion-error-modal";
-import { CloudSubscriptionModal } from "./pages/shared-modals/hydra-cloud/cloud-subscription-modal";
 import { AddFriendModal } from "./pages/profile/profile-content/add-friend-modal";
 import { ClassicsScanModal } from "./pages/settings/emulation/classics-scan-modal";
 import { RetroArchScanModal } from "./pages/settings/emulation/retroarch-scan-modal";
@@ -89,9 +87,6 @@ export function App() {
     updateUserDetails,
     clearUserDetails,
   } = useUserDetails();
-
-  const { hideHydraCloudModal, isHydraCloudModalVisible, hydraCloudFeature } =
-    useSubscription();
 
   const dispatch = useAppDispatch();
 
@@ -724,12 +719,6 @@ export function App() {
         type={toast.type}
         onClose={handleToastClose}
         duration={toast.duration}
-      />
-
-      <CloudSubscriptionModal
-        visible={isHydraCloudModalVisible}
-        onClose={hideHydraCloudModal}
-        feature={hydraCloudFeature || undefined}
       />
 
       <CloudGiftNotificationModal />

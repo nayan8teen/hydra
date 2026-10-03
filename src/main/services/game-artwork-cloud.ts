@@ -37,9 +37,9 @@ const EXTENSION_BY_MIME: Record<string, AllowedImageExtension> = {
   "image/gif": "gif",
 };
 
+// Fork: Hydra Cloud is gone, so these are plain authenticated calls.
 const SUBSCRIPTION_OPTIONS = {
   needsAuth: true,
-  needsSubscription: true,
 } as const;
 
 const canSyncArtwork = () =>

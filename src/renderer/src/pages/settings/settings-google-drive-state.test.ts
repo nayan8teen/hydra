@@ -11,7 +11,6 @@ const settings: GoogleDriveSettings = {
   driveSyncEnabled: false,
   backgroundSweepEnabled: false,
   backgroundSweepIntervalMinutes: 30,
-  folderName: "Hydra Save Sync",
 };
 
 const status = (

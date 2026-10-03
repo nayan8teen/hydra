@@ -29,9 +29,15 @@ export const GOOGLE_DRIVE_FOLDER_MIME_TYPE =
 export const GOOGLE_DRIVE_JSON_MIME_TYPE = "application/json";
 export const GOOGLE_DRIVE_BLOB_MIME_TYPE = "application/octet-stream";
 
-export const GOOGLE_DRIVE_DEFAULT_FOLDER_NAME = "Hydra Save Sync";
+// Fork: the Drive folder name is fixed. Users pick their Drive account, not the
+// layout inside it, so there is no folder-name setting to migrate.
+export const GOOGLE_DRIVE_FOLDER_NAME = "HydraLauncher GD Saves";
 export const GOOGLE_DRIVE_GAMES_FOLDER_NAME = "games";
 export const GOOGLE_DRIVE_BLOBS_FOLDER_NAME = "blobs";
+// Fork: JSON documents that replicate the former Hydra Cloud records
+// (unlocked achievements, artwork, library, emulation-save metadata).
+export const GOOGLE_DRIVE_DOCUMENTS_FOLDER_NAME = "documents";
+export const GOOGLE_DRIVE_DOCUMENT_ROLE_PROPERTY_VALUE = "document";
 export const GOOGLE_DRIVE_MANIFEST_FILE_NAME = "manifest.json";
 export const GOOGLE_DRIVE_MANIFEST_HISTORY_PREFIX = "manifest-";
 export const GOOGLE_DRIVE_MANIFEST_HISTORY_LIMIT = 5;
@@ -50,4 +56,3 @@ export const GOOGLE_DRIVE_LOOPBACK_HOST = "127.0.0.1";
 export const GOOGLE_DRIVE_DEFAULT_SWEEP_INTERVAL_MINUTES = 30;
 export const GOOGLE_DRIVE_MIN_SWEEP_INTERVAL_MINUTES = 15;
 export const GOOGLE_DRIVE_MAX_SWEEP_INTERVAL_MINUTES = 24 * 60;
-export const GOOGLE_DRIVE_MAX_FOLDER_NAME_LENGTH = 100;

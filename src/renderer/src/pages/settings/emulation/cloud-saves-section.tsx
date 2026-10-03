@@ -22,7 +22,7 @@ import {
 } from "@renderer/helpers";
 import { useToast, useUserDetails } from "@renderer/hooks";
 import { useCloudConnector } from "@renderer/hooks/use-cloud-connector";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import { useOpenGoogleDriveSettings } from "@renderer/hooks/use-google-drive-connection";
 import type {
   EmulationCloudSave,
   EmulationSavePlatform,
@@ -53,7 +53,7 @@ export function CloudSavesSection({ config, refreshKey }: Readonly<Props>) {
   const { t: tHydraCloud } = useTranslation("hydra_cloud");
   const { showSuccessToast } = useToast();
   const { hasActiveSubscription } = useUserDetails();
-  const { showHydraCloudModal } = useSubscription();
+  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
   const platforms = useMemo<EmulationSavePlatform[]>(
     () =>
       config.system === "dolphin"
@@ -146,10 +146,7 @@ export function CloudSavesSection({ config, refreshKey }: Readonly<Props>) {
             <p className="emulator-detail__cloud-locked-title">
               {tHydraCloud("hydra_cloud_feature_found")}
             </p>
-            <Button
-              theme="outline"
-              onClick={() => showHydraCloudModal("backup")}
-            >
+            <Button theme="outline" onClick={() => openGoogleDriveSettings()}>
               <HydraIcon className="emulator-detail__cloud-locked-hydra" />
               <span>{tHydraCloud("learn_more")}</span>
             </Button>

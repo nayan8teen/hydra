@@ -1,8 +1,8 @@
+import { createHash, randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
 import os from "node:os";
+import path from "node:path";
 
-import axios from "axios";
-
-import { HydraApi } from "@main/services/hydra-api";
 import type {
   EmulationCloudSave,
   EmulationSaveMetadata,
@@ -11,18 +11,36 @@ import type {
   EmulatorBinary,
 } from "@types";
 
+import {
+  googleDriveDocuments,
+  GoogleDriveService,
+  GoogleDriveStorage,
+} from "@main/services/google-drive";
+
 /*
- * Cloud emulation saves client (`/profile/emulation-saves`). Mirrors the
- * existing save-game cloud flow (`CloudSync.uploadSaveGame`): metadata calls go
- * through `HydraApi` (auth + subscription enforced), while the raw artifact
- * bytes are PUT/GET directly against the short-lived presigned URLs with
- * `axios`. Direct (non-barrel) service imports avoid a services/emulators cycle.
+ * Fork: cloud emulation saves now live in the user's own Google Drive instead
+ * of the Hydra `/profile/emulation-saves` API. An `emulation-saves.json`
+ * document keeps the metadata records and each artifact is stored as a
+ * content-addressed blob under the shared `blobs` folder.
  *
- * Every call requires an active Hydra Cloud subscription.
+ * The public surface is unchanged so every caller (renderer, big-picture, the
+ * upload/restore events) keeps working.
  */
 
-const SUB = { needsAuth: true, needsSubscription: true } as const;
+const SAVES_DOCUMENT_NAME = "emulation-saves.json";
+const SAVES_SCHEMA_VERSION = 1 as const;
 const SAVE_KIND = "game_save" as const;
+
+export interface GoogleDriveEmulationSaveRecord extends EmulationCloudSave {
+  /** Content-addressed blob hash of the save artifact. */
+  artifactHash: string;
+}
+
+interface GoogleDriveEmulationSavesDocument {
+  schemaVersion: typeof SAVES_SCHEMA_VERSION;
+  saves: GoogleDriveEmulationSaveRecord[];
+  updatedAt: string;
+}
 
 export const toEmulationSaveEmulator = (
   binary: EmulatorBinary
@@ -53,44 +71,94 @@ export interface UploadEmulationSaveInput {
   metadata?: EmulationSaveMetadata;
 }
 
-/** Create a presigned upload, PUT the bytes, then commit — returns the save. */
+const assertDriveReady = async () => {
+  if (!(await GoogleDriveService.isSyncEnabled())) {
+    throw new Error("Google Drive save sync is not enabled or not connected");
+  }
+};
+
+const readDocument = async (): Promise<GoogleDriveEmulationSavesDocument> => {
+  const document =
+    await googleDriveDocuments.read<GoogleDriveEmulationSavesDocument>(
+      SAVES_DOCUMENT_NAME
+    );
+
+  return (
+    document?.content ?? {
+      schemaVersion: SAVES_SCHEMA_VERSION,
+      saves: [],
+      updatedAt: new Date(0).toISOString(),
+    }
+  );
+};
+
+const mutateSaves = (
+  mutate: (
+    saves: GoogleDriveEmulationSaveRecord[]
+  ) => GoogleDriveEmulationSaveRecord[]
+) =>
+  googleDriveDocuments.update<GoogleDriveEmulationSavesDocument>(
+    SAVES_DOCUMENT_NAME,
+    (current) => ({
+      schemaVersion: SAVES_SCHEMA_VERSION,
+      saves: mutate(current?.saves ?? []),
+      updatedAt: new Date().toISOString(),
+    })
+  );
+
+const withTempDir = async <T>(
+  prefix: string,
+  run: (dir: string) => Promise<T>
+): Promise<T> => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  try {
+    return await run(dir);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+};
+
+/** Uploads the artifact blob and commits the metadata record. */
 export const uploadEmulationSave = async (
   input: UploadEmulationSaveInput
 ): Promise<EmulationCloudSave> => {
-  const hasShop = Boolean(input.shop && input.objectId);
-  const { id, uploadUrl } = await HydraApi.post<{
-    id: string;
-    uploadUrl: string;
-  }>(
-    "/profile/emulation-saves/upload-url",
-    {
-      platform: input.platform,
-      emulator: input.emulator,
-      saveKind: SAVE_KIND,
-      ...(hasShop ? { shop: input.shop, objectId: input.objectId } : {}),
-      saveIdentity: input.saveIdentity,
-      artifactLengthInBytes: input.buffer.length,
-    },
-    SUB
-  );
+  await assertDriveReady();
 
-  await axios.put(uploadUrl, input.buffer, {
-    headers: { "Content-Type": "application/octet-stream" },
+  const artifactHash = createHash("sha256").update(input.buffer).digest("hex");
+
+  await withTempDir("hydra-drive-emu-", async (dir) => {
+    const artifactPath = path.join(dir, "artifact.bin");
+    await fs.writeFile(artifactPath, input.buffer);
+    await GoogleDriveStorage.uploadBlob({
+      hash: artifactHash,
+      absolutePath: artifactPath,
+      sizeBytes: input.buffer.length,
+    });
   });
 
-  return HydraApi.post<EmulationCloudSave>(
-    `/profile/emulation-saves/${id}/commit`,
-    {
-      saveKind: SAVE_KIND,
-      artifactLengthInBytes: input.buffer.length,
-      fileName: input.fileName,
-      hostname: os.hostname(),
-      localLastModifiedAt: input.localLastModifiedAt,
-      label: input.label,
-      ...(input.metadata ? { metadata: input.metadata } : {}),
-    },
-    SUB
-  );
+  const now = new Date().toISOString();
+  const record: GoogleDriveEmulationSaveRecord = {
+    id: randomUUID(),
+    platform: input.platform,
+    emulator: input.emulator,
+    saveKind: SAVE_KIND,
+    saveIdentity: input.saveIdentity,
+    artifactLengthInBytes: input.buffer.length,
+    fileName: input.fileName,
+    hostname: os.hostname(),
+    localLastModifiedAt: input.localLastModifiedAt,
+    label: input.label,
+    metadata: input.metadata ?? null,
+    shop: input.shop,
+    objectId: input.objectId,
+    lastUploadedAt: now,
+    createdAt: now,
+    updatedAt: now,
+    artifactHash,
+  };
+
+  await mutateSaves((saves) => [...saves, record]);
+  return record;
 };
 
 export const listEmulationSaves = async (
@@ -98,45 +166,63 @@ export const listEmulationSaves = async (
   emulator: EmulationSaveEmulator,
   objectId?: string | null
 ): Promise<EmulationCloudSave[]> => {
-  const response = await HydraApi.get<EmulationCloudSave[]>(
-    "/profile/emulation-saves",
-    {
-      platform,
-      emulator,
-      saveKind: SAVE_KIND,
-      ...(objectId ? { shop: "launchbox", objectId } : {}),
-    },
-    SUB
+  if (!(await GoogleDriveService.isSyncEnabled())) return [];
+
+  const document = await readDocument();
+  return document.saves.filter(
+    (save) =>
+      save.platform === platform &&
+      save.emulator === emulator &&
+      (objectId
+        ? save.shop === "launchbox" && save.objectId === objectId
+        : true)
   );
-  return Array.isArray(response) ? response : [];
 };
 
-/** Resolve a download URL and fetch the raw save bytes. */
+/** Resolves the artifact blob and reads it back as a buffer. */
 export const downloadEmulationSaveBytes = async (
   id: string
 ): Promise<Buffer> => {
-  const { downloadUrl } = await HydraApi.post<{ downloadUrl: string }>(
-    `/profile/emulation-saves/${id}/download-url`,
-    undefined,
-    SUB
-  );
-  const response = await axios.get<ArrayBuffer>(downloadUrl, {
-    responseType: "arraybuffer",
+  await assertDriveReady();
+
+  const document = await readDocument();
+  const record = document.saves.find((save) => save.id === id);
+  if (!record) throw new Error("Emulation save not found");
+
+  return withTempDir("hydra-drive-emu-", async (dir) => {
+    const artifactPath = path.join(dir, "artifact.bin");
+    await GoogleDriveStorage.downloadBlob({
+      hash: record.artifactHash,
+      destinationPath: artifactPath,
+    });
+    return fs.readFile(artifactPath);
   });
-  return Buffer.from(response.data);
 };
 
 export const deleteEmulationSave = async (id: string): Promise<void> => {
-  await HydraApi.delete(`/profile/emulation-saves/${id}`, SUB);
+  await assertDriveReady();
+  await mutateSaves((saves) => saves.filter((save) => save.id !== id));
 };
 
 export const updateEmulationSave = async (
   id: string,
   body: { label?: string | null; metadata?: Record<string, unknown> | null }
 ): Promise<EmulationCloudSave> => {
-  return HydraApi.put<EmulationCloudSave>(
-    `/profile/emulation-saves/${id}`,
-    body,
-    SUB
+  await assertDriveReady();
+
+  const document = await readDocument();
+  const existing = document.saves.find((save) => save.id === id);
+  if (!existing) throw new Error("Emulation save not found");
+
+  const updated: GoogleDriveEmulationSaveRecord = {
+    ...existing,
+    ...(body.label !== undefined ? { label: body.label } : {}),
+    ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+
+  await mutateSaves((saves) =>
+    saves.map((save) => (save.id === id ? updated : save))
   );
+  return updated;
 };

@@ -7,6 +7,7 @@ import type {
 
 import { logger } from "../logger.js";
 import { GoogleDriveAuth } from "./google-drive-auth.js";
+import { googleDriveDocuments } from "./google-drive-documents-instance.js";
 import {
   getGoogleDriveSettings,
   updateGoogleDriveSettings,
@@ -37,8 +38,7 @@ export class GoogleDriveService {
       // Tokens are bound to the OAuth client that issued them.
       await GoogleDriveAuth.clearConnection();
       GoogleDriveStorage.resetCache();
-    } else if (next.folderName !== previous.folderName) {
-      GoogleDriveStorage.resetCache();
+      googleDriveDocuments.resetCache();
     }
 
     return next;
@@ -47,6 +47,7 @@ export class GoogleDriveService {
   static async connect(clientId?: string): Promise<GoogleDriveAccount> {
     const account = await GoogleDriveAuth.connect(clientId);
     GoogleDriveStorage.resetCache();
+    googleDriveDocuments.resetCache();
     return account;
   }
 
@@ -65,9 +66,22 @@ export class GoogleDriveService {
 
     await GoogleDriveAuth.disconnect();
     GoogleDriveStorage.resetCache();
+    googleDriveDocuments.resetCache();
   }
 
   static isConnected(): Promise<boolean> {
+    return GoogleDriveAuth.isConnected();
+  }
+
+  /**
+   * Fork-wide "Drive replication is on" gate used by achievements, artwork,
+   * library and emulation sync in addition to cloud saves. On means the user
+   * enabled Drive sync *and* an account is connected.
+   */
+  static async isSyncEnabled(): Promise<boolean> {
+    const settings = await getGoogleDriveSettings();
+    if (!settings.driveSyncEnabled) return false;
+
     return GoogleDriveAuth.isConnected();
   }
 

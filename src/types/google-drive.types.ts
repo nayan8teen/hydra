@@ -19,7 +19,6 @@ export interface GoogleDriveSettings {
   driveSyncEnabled: boolean;
   backgroundSweepEnabled: boolean;
   backgroundSweepIntervalMinutes: number;
-  folderName: string;
 }
 
 export type GoogleDriveConnectionState =

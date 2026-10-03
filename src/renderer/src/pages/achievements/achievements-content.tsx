@@ -15,7 +15,7 @@ import { ComparedAchievementList } from "./compared-achievement-list";
 import { AchievementList } from "./achievement-list";
 import { AchievementPanel } from "./achievement-panel";
 import { ComparedAchievementPanel } from "./compared-achievement-panel";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import { useOpenGoogleDriveSettings } from "@renderer/hooks/use-google-drive-connection";
 import { RetroAchievementsConnectBanner } from "@renderer/components/retro-achievements-connect-banner/retro-achievements-connect-banner";
 import "./achievements-content.scss";
 
@@ -40,7 +40,7 @@ interface AchievementSummaryProps {
 function AchievementSummary({ user, isComparison }: AchievementSummaryProps) {
   const { t } = useTranslation("achievement");
   const { userDetails, hasActiveSubscription } = useUserDetails();
-  const { showHydraCloudModal } = useSubscription();
+  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
 
   const getProfileImage = (
     user: Pick<UserInfo, "profileImageUrl" | "displayName">
@@ -68,7 +68,7 @@ function AchievementSummary({ user, isComparison }: AchievementSummaryProps) {
           <h3>
             <button
               className="achievements-content__comparison__container__subscription-required-button"
-              onClick={() => showHydraCloudModal("achievements")}
+              onClick={() => openGoogleDriveSettings()}
             >
               {t("subscription_needed")}
             </button>

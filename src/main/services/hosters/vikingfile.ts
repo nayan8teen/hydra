@@ -9,7 +9,7 @@ export class VikingFileApi {
     const response = await HydraApi.post<UnlockResponse>(
       "/hosters/vikingfile/unlock",
       { url: uri },
-      { needsSubscription: true }
+      { needsAuth: true }
     );
 
     if (!response?.link) {

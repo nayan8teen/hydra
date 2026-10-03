@@ -1,5 +1,3 @@
-import type { GameShop } from "@types";
-
 interface DeleteGameCloudSaveDataDependencies {
   beginPendingDeletion: () => Promise<"prepared" | "remote-started">;
   markRemoteDeletionStarted: () => Promise<void>;
@@ -13,14 +11,6 @@ interface DeleteGameCloudSaveDataDependencies {
   assertGameNotRunning: () => void;
   deleteRemoteSnapshots: () => Promise<void>;
 }
-
-export const buildDeleteGameCloudSaveSnapshotsUrl = (
-  objectId: string,
-  shop: GameShop
-) => {
-  const params = new URLSearchParams({ objectId, shop });
-  return `/profile/cloud-saves/snapshots?${params.toString()}`;
-};
 
 export const executeDeleteGameCloudSaveData = async ({
   beginPendingDeletion,

@@ -1,5 +1,5 @@
 import {
-  assertCloudSaveSubscription,
+  assertCloudSaveDriveConnected,
   assertCloudSaveDeletionInactive,
   confirmPendingCustomPathRebindApproval,
   createPendingCustomPathRebindApproval,
@@ -33,7 +33,7 @@ registerEvent(
     shop: GameShop,
     rawPath: string
   ): Promise<CloudSaveCustomPathApproval> => {
-    assertCloudSaveSubscription();
+    await assertCloudSaveDriveConnected();
     assertCustomPathCanChange(objectId, shop);
     const context = await getCloudSaveGameContext(objectId, shop);
     assertCustomPathCanChange(objectId, shop);
@@ -53,7 +53,7 @@ registerEvent(
     objectId: string,
     shop: GameShop
   ): Promise<ConfirmCloudSaveCustomPathRebindApprovalResult> => {
-    assertCloudSaveSubscription();
+    await assertCloudSaveDriveConnected();
     assertCustomPathCanChange(objectId, shop);
     return confirmPendingCustomPathRebindApproval(
       approvalId,
