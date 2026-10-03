@@ -11,7 +11,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import {
-  AuthPage,
   getCloudSaveAccessAction,
   getCloudSaveEmulatorProvider,
   hasCloudSaveExecutableSelection,
@@ -19,8 +18,11 @@ import {
 } from "@shared";
 import { Button, ConfirmationModal, Modal } from "@renderer/components";
 import { gameDetailsContext } from "@renderer/context";
-import { useToast, useUserDetails } from "@renderer/hooks";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import { useToast } from "@renderer/hooks";
+import {
+  GOOGLE_DRIVE_SETTINGS_URL,
+  useGoogleDriveConnection,
+} from "@renderer/hooks/use-google-drive-connection";
 import type {
   CloudSaveConflictResolution,
   CloudSaveCustomPathApproval,
@@ -179,8 +181,7 @@ export function CloudSaveV2Provider({
   const { t } = useTranslation("game_details");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { userDetails, hasActiveSubscription } = useUserDetails();
-  const { showHydraCloudModal } = useSubscription();
+  const { isConnected: isGoogleDriveConnected } = useGoogleDriveConnection();
   const { showErrorToast, showSuccessToast, showWarningToast } = useToast();
   const {
     game,
@@ -189,8 +190,7 @@ export function CloudSaveV2Provider({
     setGameOptionsInitialCategory,
   } = useContext(gameDetailsContext);
   const cloudSaveAccessAction = getCloudSaveAccessAction(
-    Boolean(userDetails),
-    hasActiveSubscription
+    isGoogleDriveConnected
   );
   const canUseCloudSaves = cloudSaveAccessAction === "open";
   const isV2Eligible = isCloudSaveV2Eligible(shop, game?.platform);
@@ -470,12 +470,8 @@ export function CloudSaveV2Provider({
     nextSearchParams.delete("openCloudSaveConflict");
     setSearchParams(nextSearchParams, { replace: true });
 
-    if (cloudSaveAccessAction === "sign-in") {
-      window.electron.openAuthWindow(AuthPage.SignIn);
-      return;
-    }
-    if (cloudSaveAccessAction === "paywall") {
-      showHydraCloudModal("backup");
+    if (cloudSaveAccessAction === "connect-drive") {
+      navigate(GOOGLE_DRIVE_SETTINGS_URL);
       return;
     }
 
@@ -488,7 +484,7 @@ export function CloudSaveV2Provider({
     searchParams,
     setSearchParams,
     shop,
-    showHydraCloudModal,
+    navigate,
   ]);
 
   useEffect(() => {
@@ -501,12 +497,8 @@ export function CloudSaveV2Provider({
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete("openCloudSaveProfileBinding");
     setSearchParams(nextSearchParams, { replace: true });
-    if (cloudSaveAccessAction === "sign-in") {
-      window.electron.openAuthWindow(AuthPage.SignIn);
-      return;
-    }
-    if (cloudSaveAccessAction === "paywall") {
-      showHydraCloudModal("backup");
+    if (cloudSaveAccessAction === "connect-drive") {
+      navigate(GOOGLE_DRIVE_SETTINGS_URL);
       return;
     }
     setIsFileBrowserVisible(true);
@@ -515,7 +507,7 @@ export function CloudSaveV2Provider({
     isV2Eligible,
     searchParams,
     setSearchParams,
-    showHydraCloudModal,
+    navigate,
   ]);
 
   useEffect(() => {
@@ -681,17 +673,13 @@ export function CloudSaveV2Provider({
   ]);
 
   const openManager = useCallback(() => {
-    if (cloudSaveAccessAction === "sign-in") {
-      window.electron.openAuthWindow(AuthPage.SignIn);
-      return;
-    }
-    if (cloudSaveAccessAction === "paywall") {
-      showHydraCloudModal("backup");
+    if (cloudSaveAccessAction === "connect-drive") {
+      navigate(GOOGLE_DRIVE_SETTINGS_URL);
       return;
     }
     setWasOpenedFromLaunchConflict(false);
     setIsModalVisible(true);
-  }, [cloudSaveAccessAction, showHydraCloudModal]);
+  }, [cloudSaveAccessAction, navigate]);
 
   const handleSelectExecutable = () => {
     setIsModalVisible(false);
@@ -839,12 +827,8 @@ export function CloudSaveV2Provider({
         throw new Error("cloud_save_retroarch_not_configured");
       }
       if (cloudSaveAccessAction !== "open") {
-        if (cloudSaveAccessAction === "sign-in") {
-          window.electron.openAuthWindow(AuthPage.SignIn);
-        } else {
-          showHydraCloudModal("backup");
-        }
-        throw new Error("Cloud Saves require an active subscription");
+        navigate(GOOGLE_DRIVE_SETTINGS_URL);
+        throw new Error("cloud_save_google_drive_not_connected");
       }
       try {
         await window.electron.setCloudSaveAutomaticSyncEnabled(
@@ -869,7 +853,7 @@ export function CloudSaveV2Provider({
       refresh,
       shop,
       showErrorToast,
-      showHydraCloudModal,
+      navigate,
       t,
     ]
   );
@@ -1119,12 +1103,10 @@ export function CloudSaveV2Provider({
   const openFileBrowser = useCallback(() => {
     if (cloudSaveAccessAction === "open") {
       setIsFileBrowserVisible(true);
-    } else if (cloudSaveAccessAction === "sign-in") {
-      window.electron.openAuthWindow(AuthPage.SignIn);
     } else {
-      showHydraCloudModal("backup");
+      navigate(GOOGLE_DRIVE_SETTINGS_URL);
     }
-  }, [cloudSaveAccessAction, showHydraCloudModal]);
+  }, [cloudSaveAccessAction, navigate]);
   const value = useMemo<CloudSaveV2ContextValue>(
     () => ({
       overview,

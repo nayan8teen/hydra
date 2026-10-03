@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { CloudSaveOperationCoordinator } from "./operation-coordinator.ts";
-import {
-  buildDeleteGameCloudSaveSnapshotsUrl,
-  executeDeleteGameCloudSaveData,
-} from "./delete-game-cloud-save-data-policy.ts";
+import { executeDeleteGameCloudSaveData } from "./delete-game-cloud-save-data-policy.ts";
 
 type Dependencies = Parameters<typeof executeDeleteGameCloudSaveData>[0];
 
@@ -26,13 +23,6 @@ const createDependencies = (
 });
 
 describe("delete all game cloud save data", () => {
-  it("builds an encoded request URL for the game", () => {
-    assert.equal(
-      buildDeleteGameCloudSaveSnapshotsUrl("game id/with spaces", "steam"),
-      "/profile/cloud-saves/snapshots?objectId=game+id%2Fwith+spaces&shop=steam"
-    );
-  });
-
   it("locks before preparation and clears only after local state", async () => {
     const calls: string[] = [];
 

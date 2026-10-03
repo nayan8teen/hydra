@@ -19,6 +19,7 @@ import {
 } from "@renderer/hooks";
 import {
   AlertIcon,
+  CheckIcon,
   DownloadIcon,
   LockIcon,
   PeopleIcon,
@@ -28,7 +29,11 @@ import { HowLongToBeatSection } from "./how-long-to-beat-section";
 import { LaunchboxDetailsSection } from "./launchbox-details-section";
 import { SidebarSection } from "../sidebar-section/sidebar-section";
 import { buildGameAchievementPath } from "@renderer/helpers";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import {
+  useGoogleDriveConnection,
+  useOpenGoogleDriveSettings,
+} from "@renderer/hooks/use-google-drive-connection";
+import { getAchievementsSyncStatus } from "./achievements-sync-status";
 import { RetroAchievementsConnectBanner } from "@renderer/components/retro-achievements-connect-banner/retro-achievements-connect-banner";
 import "./sidebar.scss";
 import { GameLanguageSection } from "./game-language-section";
@@ -119,7 +124,7 @@ export function Sidebar() {
     data: ProtonDBData | null;
   }>({ isLoading: shouldShowProtonFeatures, data: null });
 
-  const { userDetails, hasActiveSubscription } = useUserDetails();
+  const { userDetails } = useUserDetails();
   const [activeRequirement, setActiveRequirement] =
     useState<keyof SteamAppDetails["pc_requirements"]>("minimum");
 
@@ -129,7 +134,9 @@ export function Sidebar() {
     (state) => state.userPreferences.value
   );
 
-  const { showHydraCloudModal } = useSubscription();
+  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
+  const { isConnected: isDriveSyncActive, isLoading: isDriveSyncLoading } =
+    useGoogleDriveConnection();
   const { t } = useTranslation("game_details");
   const { formatDateTime } = useDate();
   const { numberFormatter } = useFormat();
@@ -139,6 +146,12 @@ export function Sidebar() {
     (shop === "launchbox" &&
       !!shopDetails?.retroAchievementsGameId &&
       !userPreferences?.retroAchievementsWebApiKey);
+
+  const achievementsSyncStatus = getAchievementsSyncStatus({
+    achievementsCount,
+    isLoading: isDriveSyncLoading,
+    isDriveSyncActive,
+  });
 
   useEffect(() => {
     if (objectId) {
@@ -239,11 +252,22 @@ export function Sidebar() {
           <ul className="list">
             <RetroAchievementsConnectBanner />
 
-            {!hasActiveSubscription && achievementsCount > 0 && (
+            {achievementsSyncStatus === "enabled" && (
+              <button
+                type="button"
+                className="subscription-required-button subscription-required-button--enabled"
+                onClick={() => openGoogleDriveSettings()}
+              >
+                <CheckIcon size={14} />
+                <span>{t("achievements_sync_enabled")}</span>
+              </button>
+            )}
+
+            {achievementsSyncStatus === "disabled" && (
               <button
                 type="button"
                 className="subscription-required-button"
-                onClick={() => showHydraCloudModal("achievements")}
+                onClick={() => openGoogleDriveSettings()}
               >
                 <AlertIcon size={14} />
                 <span>{t("achievements_not_sync")}</span>

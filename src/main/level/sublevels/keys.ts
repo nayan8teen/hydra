@@ -49,4 +49,8 @@ export const levelKeys = {
   cloudSaveRetroArchBindings: "cloud-save-retroarch-bindings",
   cloudSavePendingDeletions: "cloud-save-pending-deletions",
   steamSyncRun: "steamSyncRun",
+  googleDriveAuth: "google-drive-auth",
+  googleDriveSettings: "google-drive-settings",
+  googleDriveClientSecret: "google-drive-client-secret",
+  googleDriveClientRejection: "google-drive-client-rejection",
 };

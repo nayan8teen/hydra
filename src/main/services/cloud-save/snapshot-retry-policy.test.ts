@@ -5,10 +5,15 @@ import { AxiosError } from "axios";
 // @ts-ignore The Node ESM test runner requires the source extension.
 import {
   isCloudSaveCommitTransportFailure,
+  isCloudSaveConflictError,
   shouldReprepareCloudSaveSnapshot,
   shouldRetryCloudSaveConflict,
   shouldRetryCloudSaveStateChange,
 } from "./snapshot-retry-policy.ts";
+
+class DriveConflictError extends Error {
+  readonly status = 409;
+}
 
 const axiosError = (status: number, data: unknown = null) => ({
   isAxiosError: true,
@@ -79,6 +84,20 @@ describe("Cloud Save snapshot retry policy", () => {
     assert.equal(shouldRetryCloudSaveConflict(realAxiosError(409), 0), true);
     assert.equal(shouldRetryCloudSaveConflict(realAxiosError(409), 1), false);
     assert.equal(shouldRetryCloudSaveConflict(realAxiosError(429), 0), false);
+  });
+
+  it("treats a Drive precondition failure like a Hydra 409 conflict", () => {
+    assert.equal(isCloudSaveConflictError(new DriveConflictError()), true);
+    assert.equal(
+      shouldRetryCloudSaveConflict(new DriveConflictError(), 0),
+      true
+    );
+    assert.equal(
+      shouldRetryCloudSaveConflict(new DriveConflictError(), 1),
+      false
+    );
+    assert.equal(isCloudSaveConflictError(new Error("other")), false);
+    assert.equal(isCloudSaveConflictError(null), false);
   });
 
   it("allows only one retry after the analyzed state changes", () => {

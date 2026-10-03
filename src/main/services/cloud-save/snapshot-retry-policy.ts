@@ -24,8 +24,19 @@ export const shouldReprepareCloudSaveSnapshot = (error: unknown) => {
   );
 };
 
+/**
+ * A lost conflict race is always reported as HTTP 409: Hydra rejects a stale
+ * `expectedSnapshotId` and Google Drive maps a stale `If-Match` precondition
+ * failure onto the same status, so both backends retry through one path.
+ */
+export const isCloudSaveConflictError = (error: unknown) =>
+  (isAxiosError(error) && error.response?.status === 409) ||
+  (!isAxiosError(error) &&
+    error instanceof Error &&
+    (error as { status?: unknown }).status === 409);
+
 export const shouldRetryCloudSaveConflict = (error: unknown, attempt: number) =>
-  attempt === 0 && isAxiosError(error) && error.response?.status === 409;
+  attempt === 0 && isCloudSaveConflictError(error);
 
 export const shouldRetryCloudSaveStateChange = (attempt: number) =>
   attempt === 0;

@@ -11,6 +11,7 @@ const {
   getCloudSavePanelAction,
   getCloudSavePartialDescriptionKey,
   getCloudSavePresentation,
+  getCloudSaveProviderLabelKey,
   getCloudSaveSnapshotPanelMode,
   getCloudSaveSyncErrorKind,
   getCloudSaveUploadLimitError,
@@ -81,6 +82,26 @@ const fileDetails = (
     unresolvedRemoteVariantCount: 0,
     ...overrides,
   }) as CloudSaveV2FileDetails;
+
+describe("cloud save storage provider label", () => {
+  it("names the Google Drive backend when it owns the snapshot", () => {
+    assert.equal(
+      getCloudSaveProviderLabelKey("google-drive"),
+      "cloud_save_v2_storage_google_drive"
+    );
+  });
+
+  it("falls back to Hydra for the default backend", () => {
+    assert.equal(
+      getCloudSaveProviderLabelKey("hydra"),
+      "cloud_save_v2_storage_hydra"
+    );
+    assert.equal(
+      getCloudSaveProviderLabelKey(undefined),
+      "cloud_save_v2_storage_hydra"
+    );
+  });
+});
 
 describe("cloud save deletion availability", () => {
   it("supports remote-only, local-only and custom-path-only states", () => {
@@ -252,12 +273,12 @@ const presentation = (
 describe("cloud save presentation", () => {
   it("uses the neutral cloud label when access or setup is unavailable", () => {
     assert.deepEqual(presentation({ canUseCloudSaves: false }), {
-      labelKey: "cloud_save",
+      labelKey: "cloud_save_google_drive",
       icon: "cloud-slash",
       tone: "neutral",
     });
     assert.deepEqual(presentation({ hasExecutablePath: false }), {
-      labelKey: "cloud_save",
+      labelKey: "cloud_save_google_drive",
       icon: "cloud-slash",
       tone: "neutral",
     });
@@ -327,7 +348,7 @@ describe("cloud save presentation", () => {
       tone: "conflict",
     });
     assert.deepEqual(presentation({ state: "untracked" }), {
-      labelKey: "cloud_save",
+      labelKey: "cloud_save_google_drive",
       icon: "cloud",
       tone: "neutral",
     });

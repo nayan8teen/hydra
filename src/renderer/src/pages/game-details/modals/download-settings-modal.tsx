@@ -25,7 +25,7 @@ import {
   useToast,
   useUserDetails,
 } from "@renderer/hooks";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import { useOpenGoogleDriveSettings } from "@renderer/hooks/use-google-drive-connection";
 import {
   DownloadError,
   Downloader,
@@ -314,7 +314,7 @@ export function DownloadSettingsModal({
 
   const { isFeatureEnabled, Feature } = useFeature();
   const { hasActiveSubscription } = useUserDetails();
-  const { showHydraCloudModal } = useSubscription();
+  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
 
   const selectedUri = useMemo(() => {
     if (!repack || selectedDownloader === null) return null;
@@ -1423,7 +1423,7 @@ export function DownloadSettingsModal({
                           option.downloader === Downloader.VikingFile &&
                           option.isAvailableButNotConfigured
                         ) {
-                          showHydraCloudModal("vikingfile");
+                          openGoogleDriveSettings();
                         } else {
                           setSelectedDownloader(option.downloader);
                         }

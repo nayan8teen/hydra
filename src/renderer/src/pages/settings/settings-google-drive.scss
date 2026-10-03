@@ -1,0 +1,61 @@
+@use "../../scss/globals.scss";
+
+.settings-google-drive {
+  &__options {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  &__progress {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &__sync-all {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+    align-items: flex-start;
+  }
+
+  &__error {
+    display: flex;
+    flex-direction: column;
+    gap: calc(globals.$spacing-unit / 2);
+    margin-top: calc(globals.$spacing-unit * 2);
+    padding: calc(globals.$spacing-unit * 1.5);
+    border: 1px solid rgba(255, 193, 7, 0.35);
+    border-radius: 8px;
+    background: rgba(255, 193, 7, 0.08);
+  }
+
+  &__error-message {
+    margin: 0;
+    font-size: globals.$body-font-size;
+    color: globals.$muted-color;
+  }
+
+  &__error-detail {
+    margin: 0;
+    font-size: globals.$small-font-size;
+    color: globals.$body-color;
+    opacity: 0.8;
+    word-break: break-word;
+  }
+
+  &__modal {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  &__modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+}

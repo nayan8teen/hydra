@@ -50,11 +50,16 @@ import type {
   GameLauncherStatusPayload,
   CloudSaveAutomaticSyncModeChangedEvent,
   CloudSaveAutomaticSyncEvent,
+  CloudSaveBulkSyncProgress,
+  CloudSaveBulkSyncResult,
   CloudSaveConflictResolution,
   CloudSaveOverview,
   RetroArchLocalBatteryCandidate,
   RetroArchLegacyBatteryCandidate,
   CloudSaveV2FileDetails,
+  GoogleDriveAccount,
+  GoogleDriveConnectionStatus,
+  GoogleDriveSettings,
   CloudSaveSyncIpcProgressPayload,
   CloudSaveSyncProgressPayload,
   SyncCloudSaveOnGamePageResult,
@@ -167,6 +172,39 @@ contextBridge.exposeInMainWorld("electron", {
       objectId,
       shop
     ) as Promise<CloudSaveOverview>,
+  syncAllCloudSaves: () =>
+    ipcRenderer.invoke("syncAllCloudSaves") as Promise<CloudSaveBulkSyncResult>,
+  getActiveCloudSaveBulkSync: () =>
+    ipcRenderer.invoke(
+      "getActiveCloudSaveBulkSync"
+    ) as Promise<CloudSaveBulkSyncProgress | null>,
+  onCloudSaveBulkSyncProgress: (
+    callback: (progress: CloudSaveBulkSyncProgress) => void
+  ) => {
+    const channel = "on-cloud-save-bulk-sync-progress";
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown) =>
+      callback(payload as CloudSaveBulkSyncProgress);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  getGoogleDriveStatus: () =>
+    ipcRenderer.invoke(
+      "getGoogleDriveStatus"
+    ) as Promise<GoogleDriveConnectionStatus>,
+  setGoogleDriveSettings: (patch: Partial<GoogleDriveSettings>) =>
+    ipcRenderer.invoke(
+      "setGoogleDriveSettings",
+      patch
+    ) as Promise<GoogleDriveSettings>,
+  connectGoogleDrive: (clientId?: string) =>
+    ipcRenderer.invoke(
+      "connectGoogleDrive",
+      clientId
+    ) as Promise<GoogleDriveAccount>,
+  cancelGoogleDriveConnect: () =>
+    ipcRenderer.invoke("cancelGoogleDriveConnect") as Promise<void>,
+  disconnectGoogleDrive: (options?: { deleteRemoteData?: boolean }) =>
+    ipcRenderer.invoke("disconnectGoogleDrive", options) as Promise<void>,
   getCloudSaveV2FileDetails: (objectId: string, shop: GameShop) =>
     ipcRenderer.invoke(
       "getCloudSaveV2FileDetails",

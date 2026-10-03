@@ -6,6 +6,7 @@ import "./get-rpcs3-disc-identity-status";
 import "./bind-rpcs3-cloud-save-profile";
 import "./get-game-backup-preview";
 import "./delete-game-cloud-save-data";
+import "./sync-all-cloud-saves";
 import "./sync-game-cloud-save";
 import "./sync-game-cloud-save-from-modal";
 import "./sync-cloud-save-after-custom-path-rebind";

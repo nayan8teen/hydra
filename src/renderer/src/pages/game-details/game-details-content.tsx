@@ -448,7 +448,7 @@ export function GameDetailsContent() {
                         className="game-details__cloud-icon"
                       />
                     </div>
-                    {t("cloud_save")}
+                    {t("cloud_save_google_drive")}
                   </button>
                 )}
 

@@ -1,5 +1,6 @@
 import type {
   CloudSaveOverview,
+  CloudSaveRemoteProvider,
   CloudSaveState,
   CloudSaveSyncAction,
   CloudSaveSyncProgressPayload,
@@ -69,6 +70,18 @@ export const getCloudSaveSnapshotPanelMode = ({
 export const canOpenCloudSaveFileBrowser = (
   overview: CloudSaveOverview | null
 ) => overview !== null;
+
+export type CloudSaveProviderLabelKey =
+  | "cloud_save_v2_storage_hydra"
+  | "cloud_save_v2_storage_google_drive";
+
+/** Names the backend that owns the snapshots shown in the game cloud panel. */
+export const getCloudSaveProviderLabelKey = (
+  provider: CloudSaveRemoteProvider | null | undefined
+): CloudSaveProviderLabelKey =>
+  provider === "google-drive"
+    ? "cloud_save_v2_storage_google_drive"
+    : "cloud_save_v2_storage_hydra";
 
 export const hasCloudSaveDataToDelete = (
   details: CloudSaveV2FileDetails | null
@@ -225,7 +238,7 @@ export const getCloudSavePresentation = ({
 }: CloudSavePresentationInput): CloudSavePresentation => {
   if (!canUseCloudSaves || !hasExecutablePath) {
     return {
-      labelKey: "cloud_save",
+      labelKey: "cloud_save_google_drive",
       icon: "cloud-slash",
       tone: "neutral",
     };
@@ -292,7 +305,7 @@ export const getCloudSavePresentation = ({
     case "untracked":
     default:
       return {
-        labelKey: "cloud_save",
+        labelKey: "cloud_save_google_drive",
         icon: "cloud",
         tone: "neutral",
       };

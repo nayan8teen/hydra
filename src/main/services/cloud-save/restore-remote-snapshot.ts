@@ -13,10 +13,15 @@ import type {
 } from "@types";
 
 import { NativeAddon } from "../native-addon";
-import { assertCloudSaveSubscription } from "./cloud-save-access";
 import { cloudSaveFileKey } from "./cloud-save-contract";
 import { getCloudSaveGameContext } from "./cloud-save-game-context";
+import { cleanupGoogleDriveSnapshotTemp } from "./download-google-drive-snapshot-to-temp";
 import { downloadRemoteSnapshotToTemp } from "./download-remote-snapshot-to-temp";
+import {
+  assertCloudSaveRemoteAccess,
+  getCloudSaveProviderForSnapshot,
+  resolveCloudSaveProvider,
+} from "./remote-backend";
 import { listRemoteGameSnapshots } from "./list-remote-game-snapshots";
 import {
   mapWithConcurrency,
@@ -191,7 +196,9 @@ export const restoreRemoteSnapshot = async (
   versionChangeAttempt = 0,
   assertEnvironmentCurrent?: () => Promise<void>
 ): Promise<RestoreRemoteSnapshotResult> => {
-  assertCloudSaveSubscription();
+  await assertCloudSaveRemoteAccess(
+    await resolveCloudSaveProvider(gameId.objectId, gameId.shop)
+  );
 
   const emitProgress = (
     stage: RestoreProgressPayload["stage"],
@@ -297,7 +304,8 @@ export const restoreRemoteSnapshot = async (
         migration?.sourceFilesByEntryId
       ),
       (processedFiles, totalFiles) =>
-        emitProgress("downloading", processedFiles, totalFiles)
+        emitProgress("downloading", processedFiles, totalFiles),
+      getCloudSaveProviderForSnapshot(snapshot)
     );
     await verifyDownloadedRestoreFiles(downloadedFiles, emitProgress);
 
@@ -439,6 +447,9 @@ export const restoreRemoteSnapshot = async (
       SystemPath.getPath("temp")
     ).catch((error) =>
       logger.warn("Failed to clean cloud save restore temp files", error)
+    );
+    await cleanupGoogleDriveSnapshotTemp(tempSnapshotId).catch((error) =>
+      logger.warn("Failed to clean Google Drive restore temp files", error)
     );
   }
 };

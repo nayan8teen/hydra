@@ -5,6 +5,9 @@ export interface CloudSaveGameId {
   objectId: string;
 }
 
+/** Remote storage backing a game's cloud saves. */
+export type CloudSaveRemoteProvider = "hydra" | "google-drive";
+
 export interface CloudSaveRuleCondition {
   os?: string;
   store?: string;
@@ -326,6 +329,7 @@ export interface RemoteSnapshotSummary {
   fileCount: number;
   totalSizeBytes: number;
   aggregateHash: string;
+  provider?: CloudSaveRemoteProvider;
 }
 
 export type CloudSaveState =
@@ -363,6 +367,7 @@ export interface RetroArchLegacyBatteryCandidate {
 }
 
 export interface CloudSaveOverview extends CloudSaveStateResult {
+  provider?: CloudSaveRemoteProvider;
   localSnapshotSummary: {
     updatedAt: string | null;
     totalSizeBytes: number;
@@ -473,7 +478,8 @@ export type CloudSaveSyncTrigger =
   | "game-page-open"
   | "custom-path-rebind"
   | "pre-launch"
-  | "post-exit";
+  | "post-exit"
+  | "background-sweep";
 
 export type CloudSaveSyncAction =
   | "none"
@@ -545,6 +551,24 @@ export interface CloudSaveSyncProgressPayload {
 export interface CloudSaveSyncIpcProgressPayload
   extends CloudSaveSyncProgressPayload {
   operationId: string;
+}
+
+export interface CloudSaveBulkSyncProgress {
+  processed: number;
+  total: number;
+  synced: number;
+  skipped: number;
+  failed: number;
+  conflicts: number;
+  currentLabel: string | null;
+}
+
+export interface CloudSaveBulkSyncResult {
+  total: number;
+  synced: number;
+  skipped: number;
+  failed: number;
+  conflicts: number;
 }
 
 export interface ResolveRestoreTargetsInput
@@ -809,6 +833,7 @@ export interface RemoteGameSnapshot {
   fileCount: number;
   totalSizeBytes: number;
   aggregateHash: string;
+  provider?: CloudSaveRemoteProvider;
 }
 
 export interface CloudSaveSyncAnchorEntry extends CloudSaveFileIdentity {
@@ -819,6 +844,8 @@ export interface CloudSaveSyncAnchorEntry extends CloudSaveFileIdentity {
 
 export interface CloudSaveSyncAnchor {
   schemaVersion: 4;
+  /** Remote backend that base state belongs to; absent means Hydra. */
+  provider?: CloudSaveRemoteProvider;
   environmentId: string;
   baseSnapshotId: string;
   baseVersion: number;

@@ -6,16 +6,20 @@ import {
   recordLatestCloudSaveObservation,
 } from "./automatic-sync-observation";
 import { getCloudSaveAutomaticSyncEnabled } from "./automatic-sync-settings";
-import { assertCloudSaveSubscription } from "./cloud-save-access";
 import { cloudSaveFileKey } from "./cloud-save-contract";
 import { getUnconfiguredCloudSaveCustomPathCandidates } from "./custom-path-approval-policy";
+import {
+  assertCloudSaveRemoteAccess,
+  resolveCloudSaveProvider,
+} from "./remote-backend";
 import { getFirstSyncState, getSuggestedCloudSaveAction } from "./sync-game";
 
 export const getCloudSaveOverview = async (
   objectId: string,
   shop: GameShop
 ): Promise<CloudSaveOverview> => {
-  assertCloudSaveSubscription();
+  const provider = await resolveCloudSaveProvider(objectId, shop);
+  await assertCloudSaveRemoteAccess(provider);
 
   const [analysis, isAutomaticSyncEnabled] = await Promise.all([
     analyzeCloudSaveState(objectId, shop),
@@ -55,6 +59,7 @@ export const getCloudSaveOverview = async (
   return {
     ...analysis.state,
     state,
+    provider,
     hasChanged: state !== "synced",
     localSnapshotSummary: {
       updatedAt: localSnapshotUpdatedAt,

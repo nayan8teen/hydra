@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { Modal } from "@renderer/components";
 import {
   formatBytes,
@@ -35,7 +36,10 @@ import {
   useToast,
   useUserDetails,
 } from "@renderer/hooks";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import {
+  GOOGLE_DRIVE_SETTINGS_URL,
+  useGoogleDriveConnection,
+} from "@renderer/hooks/use-google-drive-connection";
 import { RemoveGameFromLibraryModal } from "./remove-from-library-modal";
 import { ResetAchievementsModal } from "./reset-achievements-modal";
 import { ChangeGamePlaytimeModal } from "./change-game-playtime-modal";
@@ -237,12 +241,12 @@ export function GameOptionsModal({
     isGameDeleting,
     cancelDownload,
   } = useDownload();
-  const { userDetails, hasActiveSubscription } = useUserDetails();
+  const navigate = useNavigate();
+  const { userDetails } = useUserDetails();
   const { artifacts } = useContext(cloudSyncContext);
-  const { showHydraCloudModal } = useSubscription();
+  const { isConnected: isGoogleDriveConnected } = useGoogleDriveConnection();
   const cloudSaveAccessAction = getCloudSaveAccessAction(
-    Boolean(userDetails),
-    hasActiveSubscription
+    isGoogleDriveConnected
   );
   const cloudSaveSettings = getCloudSaveVisibility(
     game.shop,
@@ -251,7 +255,7 @@ export function GameOptionsModal({
   const { showV2: showCloudSaveV2Settings, legacyPurpose } = cloudSaveSettings;
   const showLegacyCloudSaveSettings = isLegacyCloudSaveSettingsAvailable(
     cloudSaveSettings,
-    hasActiveSubscription,
+    isGoogleDriveConnected,
     artifacts.length
   );
   const userPreferences = useAppSelector(
@@ -895,16 +899,16 @@ export function GameOptionsModal({
         label: t("settings_category_customization"),
         icon: <ImageIcon size={16} />,
       },
-      ...(showCloudSaveV2Settings && cloudSaveAccessAction !== "sign-in"
+      ...(showCloudSaveV2Settings && cloudSaveAccessAction === "open"
         ? [
             {
               id: "hydra_cloud" as const,
-              label: t("settings_category_hydra_cloud"),
+              label: t("settings_category_google_drive_sync"),
               icon: <CloudIcon size={16} />,
             },
           ]
         : []),
-      ...(showLegacyCloudSaveSettings && cloudSaveAccessAction !== "sign-in"
+      ...(showLegacyCloudSaveSettings && cloudSaveAccessAction === "open"
         ? [
             {
               id: "hydra_cloud_legacy" as const,
@@ -983,17 +987,17 @@ export function GameOptionsModal({
 
     if (
       isRequestedCloudCategoryAvailable &&
-      cloudSaveAccessAction === "paywall"
+      cloudSaveAccessAction === "connect-drive"
     ) {
-      showHydraCloudModal("backup");
+      navigate(GOOGLE_DRIVE_SETTINGS_URL);
     }
   }, [
     cloudSaveAccessAction,
     initialCategory,
+    navigate,
     showDownloadSettings,
     showCloudSaveV2Settings,
     showLegacyCloudSaveSettings,
-    showHydraCloudModal,
     visible,
   ]);
 
@@ -1028,9 +1032,7 @@ export function GameOptionsModal({
       (category === "hydra_cloud" || category === "hydra_cloud_legacy") &&
       cloudSaveAccessAction !== "open"
     ) {
-      if (cloudSaveAccessAction === "paywall") {
-        showHydraCloudModal("backup");
-      }
+      navigate(GOOGLE_DRIVE_SETTINGS_URL);
       return;
     }
     setSelectedCategory(category);

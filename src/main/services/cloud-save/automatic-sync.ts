@@ -12,12 +12,14 @@ import {
 } from "@shared";
 import { gamesSublevel, levelKeys } from "@main/level";
 
-import { HydraApi } from "../hydra-api";
 import { isGameRunning } from "../game-running-state";
 import { logger } from "../logger";
 import { WindowManager } from "../window-manager";
 import { getCloudSaveAutomaticSyncEnabled } from "./automatic-sync-settings";
-import { canAccessCloudSaves } from "./cloud-save-access";
+import {
+  canAccessCloudSaveRemote,
+  resolveCloudSaveProvider,
+} from "./remote-backend";
 import { syncGameCloudSave } from "./sync-game-cloud-save";
 import { getCloudSaveGameContext } from "./cloud-save-game-context";
 import { getCloudSaveErrorDetails } from "./cloud-save-error-details";
@@ -60,17 +62,23 @@ const isPendingDeletionBlockingAutomaticSync = async (
     return true;
   });
 
-export const canRunAutomaticCloudSaveSync = async (
+interface CanRunCloudSaveSyncOptions {
+  /** Automatic syncs also honour the per-game automatic sync setting. */
+  requireAutomaticSyncEnabled: boolean;
+}
+
+const canRunCloudSaveSync = async (
   objectId: string,
-  shop: GameShop
+  shop: GameShop,
+  options: CanRunCloudSaveSyncOptions
 ) => {
   if (
-    !canAccessCloudSaves(
-      HydraApi.isLoggedIn(),
-      HydraApi.hasActiveSubscription()
-    ) ||
+    !(await canAccessCloudSaveRemote(
+      await resolveCloudSaveProvider(objectId, shop)
+    )) ||
     (await isPendingDeletionBlockingAutomaticSync(objectId, shop)) ||
-    !(await getCloudSaveAutomaticSyncEnabled(objectId, shop))
+    (options.requireAutomaticSyncEnabled &&
+      !(await getCloudSaveAutomaticSyncEnabled(objectId, shop)))
   ) {
     return false;
   }
@@ -104,7 +112,20 @@ export const canRunAutomaticCloudSaveSync = async (
   return true;
 };
 
+export const canRunAutomaticCloudSaveSync = (
+  objectId: string,
+  shop: GameShop
+) => canRunCloudSaveSync(objectId, shop, { requireAutomaticSyncEnabled: true });
+
+/** Manual bulk syncs run regardless of the per-game automatic sync toggle. */
+export const canRunManualCloudSaveSync = (objectId: string, shop: GameShop) =>
+  canRunCloudSaveSync(objectId, shop, { requireAutomaticSyncEnabled: false });
+
 const emitAutomaticSyncEvent = (event: CloudSaveAutomaticSyncEvent) => {
+  // Background sweeps are silent: the user did not ask for this run and it
+  // must not interrupt whatever they are doing in the app.
+  if (event.trigger === "background-sweep") return;
+
   WindowManager.sendToAppWindows("on-cloud-save-automatic-sync", event);
 };
 
@@ -116,10 +137,9 @@ export const runAutomaticCloudSaveSyncDetailed = async (
   expectedRemoteHash?: string | null
 ): Promise<AutomaticCloudSaveSyncOutcome> => {
   if (
-    !canAccessCloudSaves(
-      HydraApi.isLoggedIn(),
-      HydraApi.hasActiveSubscription()
-    )
+    !(await canAccessCloudSaveRemote(
+      await resolveCloudSaveProvider(objectId, shop)
+    ))
   ) {
     return { status: "skipped", result: null };
   }
@@ -364,10 +384,9 @@ export const runAutomaticCloudSavePostExit = async (
 ): Promise<SyncGameCloudSaveResult | null> => {
   const guard = consumeCloudSaveLaunchGuard(objectId, shop);
   if (
-    !canAccessCloudSaves(
-      HydraApi.isLoggedIn(),
-      HydraApi.hasActiveSubscription()
-    )
+    !(await canAccessCloudSaveRemote(
+      await resolveCloudSaveProvider(objectId, shop)
+    ))
   ) {
     return null;
   }

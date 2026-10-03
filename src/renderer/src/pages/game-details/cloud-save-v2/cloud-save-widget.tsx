@@ -52,7 +52,7 @@ export function CloudSaveWidget() {
       type="button"
       className={`game-details__cloud-sync-button cloud-save-v2__trigger cloud-save-v2__trigger--${presentation.tone}`}
       onClick={openManager}
-      title={t("cloud_save")}
+      title={t("cloud_save_google_drive")}
     >
       <CloudSaveStatusIcon icon={presentation.icon} />
       {t(presentation.labelKey)}
