@@ -99,6 +99,16 @@ skip or weaken them.
 
 ## Git & PRs
 
+- **Always start new work on a fresh branch created from `origin/main`
+  (`git fetch origin && git checkout -b <branch> origin/main`), never from
+  another feature branch.** Branching from a feature branch leaves the PR
+  carrying that branch's unmerged commits and creates squash/merge conflicts
+  when the upstream PR lands (this exact problem cost a conflict-resolution
+  pass once already).
+- If you find yourself already on an existing feature branch and the task's
+  relationship to that work is ambiguous, **ask the user** whether to continue
+  on the current branch or start a new branch (and PR) from `main` — do not
+  silently pick one.
 - `origin` is the fork `git@github.com:nayan8teen/hydra.git`; `upstream` is
   `hydralauncher/hydra`. Feature branches live on the fork and PRs target the
   fork's own `main` (`gh pr create --repo nayan8teen/hydra --base main`).
