@@ -190,6 +190,7 @@ export class GoogleDriveAuth {
         code,
         codeVerifier: pkce.verifier,
         redirectUri,
+        clientSecret: settings.clientSecret,
       });
       const account = await googleDriveOAuthClient.fetchAccount(
         tokens.accessToken
@@ -462,13 +463,18 @@ export class GoogleDriveAuth {
     }
 
     try {
+      const body = new URLSearchParams({
+        client_id: settings.clientId,
+        refresh_token: session.refreshToken,
+        grant_type: "refresh_token",
+      });
+      if (settings.clientSecret) {
+        body.set("client_secret", settings.clientSecret);
+      }
+
       const response = await axios.post<GoogleDriveTokenResponse>(
         GOOGLE_OAUTH_TOKEN_URL,
-        new URLSearchParams({
-          client_id: settings.clientId,
-          refresh_token: session.refreshToken,
-          grant_type: "refresh_token",
-        }).toString(),
+        body.toString(),
         { headers: FORM_HEADERS, timeout: GOOGLE_DRIVE_REQUEST_TIMEOUT_MS }
       );
       const accessToken = response.data.access_token;

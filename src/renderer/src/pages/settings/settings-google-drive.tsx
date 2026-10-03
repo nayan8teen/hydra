@@ -5,6 +5,7 @@ import {
   getGoogleDriveConnectFailure,
   getGoogleDriveConnectFailureFromStatus,
   isValidGoogleDriveClientId,
+  isValidGoogleDriveClientSecret,
   type GoogleDriveConnectFailure,
 } from "@shared";
 import { Button, CheckboxField, Modal, TextField } from "@renderer/components";
@@ -43,6 +44,7 @@ export function SettingsGoogleDrive() {
   const [connectFailure, setConnectFailure] =
     useState<GoogleDriveConnectFailure | null>(null);
   const [clientIdDraft, setClientIdDraft] = useState("");
+  const [clientSecretDraft, setClientSecretDraft] = useState("");
   const [folderDraft, setFolderDraft] = useState("");
   const [sweepIntervalDraft, setSweepIntervalDraft] = useState("");
   const [avatarError, setAvatarError] = useState(false);
@@ -75,6 +77,11 @@ export function SettingsGoogleDrive() {
     clientIdDraft.trim().length > 0 && !isClientIdValid
       ? t("google_drive_client_id_invalid")
       : undefined;
+  const isClientSecretValid = isValidGoogleDriveClientSecret(clientSecretDraft);
+  const clientSecretError =
+    clientSecretDraft.trim().length > 0 && !isClientSecretValid
+      ? t("google_drive_client_secret_invalid")
+      : undefined;
 
   useEffect(() => {
     setAvatarError(false);
@@ -90,6 +97,7 @@ export function SettingsGoogleDrive() {
       if (!didInitializeDrafts.current) {
         didInitializeDrafts.current = true;
         setClientIdDraft(next.settings.clientId ?? "");
+        setClientSecretDraft(next.settings.clientSecret ?? "");
         setFolderDraft(next.settings.folderName);
         setSweepIntervalDraft(
           String(next.settings.backgroundSweepIntervalMinutes)
@@ -176,13 +184,19 @@ export function SettingsGoogleDrive() {
       return;
     }
 
+    if (!isClientSecretValid) {
+      showErrorToast(t("google_drive_client_secret_invalid"));
+      return;
+    }
+
     const clientId = clientIdDraft.trim();
+    const clientSecret = clientSecretDraft.trim() || null;
     setIsConnecting(true);
     setHasConnectFailed(false);
     setConnectFailure(null);
 
     try {
-      await saveSettings({ clientId });
+      await saveSettings({ clientId, clientSecret });
       await runGoogleDriveConnect(() =>
         globalThis.window.electron.connectGoogleDrive(clientId)
       );
@@ -471,6 +485,17 @@ export function SettingsGoogleDrive() {
           disabled={isSaving || isDisconnecting}
           onChange={(event) => setClientIdDraft(event.target.value)}
         />
+
+        <TextField
+          type="password"
+          label={t("google_drive_client_secret_label")}
+          hint={t("google_drive_client_secret_hint")}
+          error={clientSecretError}
+          placeholder="GOCSPX-…"
+          value={clientSecretDraft}
+          disabled={isSaving || isDisconnecting}
+          onChange={(event) => setClientSecretDraft(event.target.value)}
+        />
       </>
     );
   };
@@ -501,7 +526,7 @@ export function SettingsGoogleDrive() {
     return (
       <Button
         onClick={() => void handleConnect()}
-        disabled={isSaving || !isClientIdValid}
+        disabled={isSaving || !isClientIdValid || !isClientSecretValid}
       >
         <LinkExternalIcon size={STATUS_ICON_SIZE} />
         {presentation.viewState === "needs-reauth"

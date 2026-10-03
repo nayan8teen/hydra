@@ -10,6 +10,12 @@ export interface GoogleDriveAccount {
 
 export interface GoogleDriveSettings {
   clientId: string | null;
+  /**
+   * Google OAuth client secret. Only needed for "Web application" clients;
+   * "Desktop app" clients authenticate with PKCE alone. Never sent anywhere
+   * but Google's token endpoint.
+   */
+  clientSecret: string | null;
   driveSyncEnabled: boolean;
   backgroundSweepEnabled: boolean;
   backgroundSweepIntervalMinutes: number;

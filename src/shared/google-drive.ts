@@ -5,6 +5,25 @@ const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/;
 export const isValidGoogleDriveClientId = (value: unknown): value is string =>
   typeof value === "string" && CLIENT_ID_PATTERN.test(value.trim());
 
+export const GOOGLE_DRIVE_CLIENT_SECRET_MAX_LENGTH = 512;
+
+/**
+ * Google issues secrets like `GOCSPX-…`. The exact alphabet is not part of any
+ * contract, so accept any compact, printable value and let Google have the
+ * final word.
+ */
+export const isValidGoogleDriveClientSecret = (
+  value: unknown
+): value is string => {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return (
+    trimmed.length >= 8 &&
+    trimmed.length <= GOOGLE_DRIVE_CLIENT_SECRET_MAX_LENGTH &&
+    !/\s/.test(trimmed)
+  );
+};
+
 /**
  * Every Drive authorization failure is reported as an error message prefixed
  * with one of these stable markers. The main process embeds the provider's own

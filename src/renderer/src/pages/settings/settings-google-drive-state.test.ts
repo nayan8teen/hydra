@@ -7,6 +7,7 @@ import { getGoogleDriveIntegrationPresentation } from "./settings-google-drive-s
 
 const settings: GoogleDriveSettings = {
   clientId: "123456789012-abcdefghijklmnop.apps.googleusercontent.com",
+  clientSecret: null,
   driveSyncEnabled: false,
   backgroundSweepEnabled: false,
   backgroundSweepIntervalMinutes: 30,
