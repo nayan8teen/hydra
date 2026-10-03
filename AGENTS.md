@@ -117,6 +117,6 @@ skip or weaken them.
   encrypted with Electron `safeStorage`, each in its own LevelDB record with a
   `{ version, encrypted, value }` shape — never inside the plain settings JSON.
 - The Google OAuth flow is PKCE over a loopback redirect (`127.0.0.1:<random
-  port>`) opened in the system browser; the optional client secret is only
+port>`) opened in the system browser; the optional client secret is only
   needed for "Web application" client IDs, which Google rejects with
   `client_secret is missing.` otherwise.
