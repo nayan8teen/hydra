@@ -903,7 +903,7 @@ export function GameOptionsModal({
         ? [
             {
               id: "hydra_cloud" as const,
-              label: t("settings_category_hydra_cloud"),
+              label: t("settings_category_google_drive_sync"),
               icon: <CloudIcon size={16} />,
             },
           ]
