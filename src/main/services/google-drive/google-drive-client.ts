@@ -23,6 +23,27 @@ export type GoogleDriveAccessTokenProvider = (options?: {
   forceRefresh?: boolean;
 }) => Promise<string>;
 
+/** Extracts the human-readable reason from a Drive error response body. */
+const describeGoogleDriveErrorBody = (data: unknown): string | null => {
+  if (typeof data === "string") {
+    const trimmed = data.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (data && typeof data === "object") {
+    const error = (data as { error?: unknown }).error;
+    if (typeof error === "string" && error.trim().length > 0) {
+      return error.trim();
+    }
+    if (error && typeof error === "object") {
+      const message = (error as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim().length > 0) {
+        return message.trim();
+      }
+    }
+  }
+  return null;
+};
+
 export interface GoogleDriveFileList {
   files: GoogleDriveFileMetadata[];
   nextPageToken?: string;
@@ -77,11 +98,20 @@ export class GoogleDriveClient {
     try {
       return await run(accessToken);
     } catch (error) {
-      if (!isAxiosError(error) || error.response?.status !== 401) throw error;
-      const refreshedAccessToken = await this.getAccessToken({
-        forceRefresh: true,
-      });
-      return run(refreshedAccessToken);
+      if (isAxiosError(error) && error.response?.status === 401) {
+        const refreshedAccessToken = await this.getAccessToken({
+          forceRefresh: true,
+        });
+        return run(refreshedAccessToken);
+      }
+
+      // Keep the axios error (callers match on its status) but surface the
+      // Drive API's reason, e.g. "Invalid field selection: etag".
+      if (isAxiosError(error) && error.response) {
+        const detail = describeGoogleDriveErrorBody(error.response.data);
+        if (detail) error.message = `${error.message}: ${detail}`;
+      }
+      throw error;
     }
   }
 

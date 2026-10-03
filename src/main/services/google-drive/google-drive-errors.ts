@@ -107,6 +107,6 @@ export const isGoogleDriveReauthRequiredError = (
 ): error is GoogleDriveReauthRequiredError =>
   error instanceof GoogleDriveReauthRequiredError;
 
-/** Drive answers stale `If-Match` writes with HTTP 412. */
+/** A stale-condition write is answered with HTTP 412 (best-effort on v3). */
 export const isGoogleDrivePreconditionFailedError = (error: unknown) =>
   isAxiosError(error) && error.response?.status === 412;

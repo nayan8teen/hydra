@@ -19,8 +19,10 @@ export const GOOGLE_DRIVE_FILES_URL =
 export const GOOGLE_DRIVE_UPLOAD_URL =
   "https://www.googleapis.com/upload/drive/v3/files";
 
+// Drive v3 removed `etag` from the File resource; `headRevisionId` changes on
+// every content update and is used as the optimistic-concurrency token.
 export const GOOGLE_DRIVE_FILE_FIELDS =
-  "id,name,mimeType,size,etag,modifiedTime,webViewLink,appProperties";
+  "id,name,mimeType,size,headRevisionId,modifiedTime,webViewLink,appProperties";
 
 export const GOOGLE_DRIVE_FOLDER_MIME_TYPE =
   "application/vnd.google-apps.folder";

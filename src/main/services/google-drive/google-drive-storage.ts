@@ -267,7 +267,7 @@ export class GoogleDriveStorage {
 
     return {
       fileId: file.id,
-      etag: file.etag ?? "",
+      etag: file.headRevisionId ?? "",
       modifiedTime: file.modifiedTime ?? manifest.updatedAt,
       manifest,
     };
@@ -288,16 +288,17 @@ export class GoogleDriveStorage {
 
     return {
       fileId: file.id,
-      etag: file.etag ?? "",
+      etag: file.headRevisionId ?? "",
       modifiedTime: file.modifiedTime ?? manifest.updatedAt,
       manifest,
     };
   }
 
   /**
-   * Writes the head manifest for a game. `previousEtag` guards the update with
-   * `If-Match`, so a concurrent commit from another device raises
-   * `GoogleDriveManifestConflictError` instead of overwriting it.
+   * Writes the head manifest for a game. `previousEtag` carries the file's
+   * head revision token and is sent as `If-Match`; Drive v3 only honours that
+   * best-effort (the File resource has no etag), so the version check in
+   * `planGoogleDriveSnapshotWrite` is the primary concurrency guard.
    */
   static async writeManifest(
     shop: GameShop,
@@ -312,7 +313,7 @@ export class GoogleDriveStorage {
     if (input.previousManifestFileId) {
       if (!input.previousEtag) {
         throw new GoogleDriveManifestInvalidError(
-          "Google Drive manifest etag is required for updates"
+          "Google Drive manifest revision token is required for updates"
         );
       }
 
@@ -354,7 +355,7 @@ export class GoogleDriveStorage {
 
     const ref: GoogleDriveManifestRef = {
       fileId: file.id,
-      etag: file.etag ?? "",
+      etag: file.headRevisionId ?? "",
       modifiedTime: file.modifiedTime ?? manifest.updatedAt,
       manifest,
     };
