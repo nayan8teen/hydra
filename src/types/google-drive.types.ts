@@ -88,7 +88,7 @@ export interface GoogleDriveFileMetadata {
   name: string;
   mimeType?: string;
   size?: string;
-  etag?: string;
+  headRevisionId?: string;
   modifiedTime?: string;
   webViewLink?: string;
   appProperties?: Record<string, string>;

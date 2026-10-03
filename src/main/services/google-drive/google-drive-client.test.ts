@@ -57,14 +57,20 @@ const startFakeDrive = async (): Promise<FakeDriveServer> => {
           id: "folder-1",
           name: JSON.parse(body.toString("utf8")).name,
           mimeType: "application/vnd.google-apps.folder",
-          etag: "etag-folder-1",
+          headRevisionId: "revision-folder-1",
         });
         return;
       }
 
       if (request.method === "GET" && url.pathname === "/files") {
         json(200, {
-          files: [{ id: "blob-1", name: "hash-1", etag: "etag-blob-1" }],
+          files: [
+            {
+              id: "blob-1",
+              name: "hash-1",
+              headRevisionId: "revision-blob-1",
+            },
+          ],
           nextPageToken: "page-2",
         });
         return;
@@ -79,7 +85,7 @@ const startFakeDrive = async (): Promise<FakeDriveServer> => {
         json(200, {
           id: "file-1",
           name: "manifest.json",
-          etag: "etag-1",
+          headRevisionId: "revision-1",
           modifiedTime: "2026-01-01T00:00:00.000Z",
         });
         return;
@@ -98,7 +104,11 @@ const startFakeDrive = async (): Promise<FakeDriveServer> => {
           json(401, { error: { message: "unauthorized" } });
           return;
         }
-        json(200, { id: "flaky", name: "flaky", etag: "etag-flaky" });
+        json(200, {
+          id: "flaky",
+          name: "flaky",
+          headRevisionId: "revision-flaky",
+        });
         return;
       }
 
@@ -120,7 +130,7 @@ const startFakeDrive = async (): Promise<FakeDriveServer> => {
         json(200, {
           id: "manifest-1",
           name: "manifest.json",
-          etag: "etag-manifest-1",
+          headRevisionId: "revision-manifest-1",
         });
         return;
       }
@@ -134,14 +144,14 @@ const startFakeDrive = async (): Promise<FakeDriveServer> => {
         request.method === "PATCH" &&
         url.pathname === "/upload/files/file-1"
       ) {
-        if (request.headers["if-match"] === "stale-etag") {
+        if (request.headers["if-match"] === "stale-revision") {
           json(412, { error: { message: "preconditionFailed" } });
           return;
         }
         json(200, {
           id: "file-1",
           name: "manifest.json",
-          etag: "etag-2",
+          headRevisionId: "revision-2",
         });
         return;
       }
@@ -197,6 +207,11 @@ describe("Google Drive REST client", () => {
     const url = new URL(request!.url, "http://localhost");
     assert.equal(url.searchParams.get("q"), "name = 'hash-1'");
     assert.equal(url.searchParams.get("spaces"), "drive");
+    // Drive v3 rejects unknown field selections with a 400, so the field
+    // mask must never ask for the removed `etag` field.
+    const fields = url.searchParams.get("fields") ?? "";
+    assert.match(fields, /headRevisionId/);
+    assert.doesNotMatch(fields, /etag/);
     assert.equal(request!.headers.authorization, "Bearer access-token");
   });
 
@@ -214,7 +229,7 @@ describe("Google Drive REST client", () => {
     assert.equal(body.mimeType, "application/vnd.google-apps.folder");
 
     const metadata = await client.getFileMetadata("file-1");
-    assert.equal(metadata?.etag, "etag-1");
+    assert.equal(metadata?.headRevisionId, "revision-1");
     assert.equal(await client.getFileMetadata("missing"), null);
   });
 
@@ -238,16 +253,16 @@ describe("Google Drive REST client", () => {
     const updated = await client.updateJsonFile({
       fileId: "file-1",
       content: '{"version":2}',
-      ifMatch: "etag-1",
+      ifMatch: "revision-1",
     });
-    assert.equal(updated.etag, "etag-2");
-    assert.equal(fake.requests.at(-1)!.headers["if-match"], "etag-1");
+    assert.equal(updated.headRevisionId, "revision-2");
+    assert.equal(fake.requests.at(-1)!.headers["if-match"], "revision-1");
 
     await assert.rejects(
       client.updateJsonFile({
         fileId: "file-1",
         content: '{"version":3}',
-        ifMatch: "stale-etag",
+        ifMatch: "stale-revision",
       }),
       (error: unknown) => isGoogleDrivePreconditionFailedError(error)
     );
