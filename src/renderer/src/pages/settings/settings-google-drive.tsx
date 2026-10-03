@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LinkExternalIcon, PersonIcon, SyncIcon } from "@primer/octicons-react";
-import { isValidGoogleDriveClientId } from "@shared";
+import {
+  getGoogleDriveConnectFailure,
+  getGoogleDriveConnectFailureFromStatus,
+  isValidGoogleDriveClientId,
+  type GoogleDriveConnectFailure,
+} from "@shared";
 import { Button, CheckboxField, Modal, TextField } from "@renderer/components";
 import { useToast } from "@renderer/hooks";
 import { useCloudSaveBulkSync } from "@renderer/hooks/use-cloud-save-bulk-sync";
@@ -14,10 +19,7 @@ import {
   getPendingGoogleDriveConnect,
   runGoogleDriveConnect,
 } from "./google-drive-connect-state";
-import {
-  getGoogleDriveConnectErrorMessageKey,
-  getGoogleDriveIntegrationPresentation,
-} from "./settings-google-drive-state";
+import { getGoogleDriveIntegrationPresentation } from "./settings-google-drive-state";
 import { getCloudSaveSyncAllPresentation } from "./settings-cloud-save-sync-progress";
 
 import "./settings-google-drive.scss";
@@ -38,6 +40,8 @@ export function SettingsGoogleDrive() {
     () => getPendingGoogleDriveConnect() !== null
   );
   const [hasConnectFailed, setHasConnectFailed] = useState(false);
+  const [connectFailure, setConnectFailure] =
+    useState<GoogleDriveConnectFailure | null>(null);
   const [clientIdDraft, setClientIdDraft] = useState("");
   const [folderDraft, setFolderDraft] = useState("");
   const [sweepIntervalDraft, setSweepIntervalDraft] = useState("");
@@ -63,6 +67,9 @@ export function SettingsGoogleDrive() {
     hasConnectFailed,
   });
   const account = status?.state === "connected" ? status.account : null;
+  const connectFailureToShow =
+    connectFailure ??
+    getGoogleDriveConnectFailureFromStatus(status?.connectError);
   const isClientIdValid = isValidGoogleDriveClientId(clientIdDraft);
   const clientIdError =
     clientIdDraft.trim().length > 0 && !isClientIdValid
@@ -89,7 +96,9 @@ export function SettingsGoogleDrive() {
         );
       }
 
-      if (next.state !== "disconnected") setHasConnectFailed(false);
+      setHasConnectFailed(
+        next.state === "disconnected" && next.connectError !== null
+      );
     } catch (error) {
       logger.error(error);
     } finally {
@@ -112,11 +121,15 @@ export function SettingsGoogleDrive() {
         if (cancelled) return;
         showSuccessToast(t("google_drive_connected"));
         setHasConnectFailed(false);
+        setConnectFailure(null);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setHasConnectFailed(true);
         logger.error(error);
+        const failure = getGoogleDriveConnectFailure(error);
+        if (failure.isCancelled) return;
+        setHasConnectFailed(true);
+        setConnectFailure(failure);
       })
       .finally(() => {
         if (cancelled) return;
@@ -166,6 +179,7 @@ export function SettingsGoogleDrive() {
     const clientId = clientIdDraft.trim();
     setIsConnecting(true);
     setHasConnectFailed(false);
+    setConnectFailure(null);
 
     try {
       await saveSettings({ clientId });
@@ -176,8 +190,12 @@ export function SettingsGoogleDrive() {
       await refreshStatus({ silent: true });
     } catch (error) {
       logger.error(error);
-      setHasConnectFailed(true);
-      showErrorToast(t(getGoogleDriveConnectErrorMessageKey(error)));
+      const failure = getGoogleDriveConnectFailure(error);
+      if (!failure.isCancelled) {
+        setHasConnectFailed(true);
+        setConnectFailure(failure);
+      }
+      showErrorToast(t(failure.messageKey));
     } finally {
       setIsConnecting(false);
     }
@@ -428,6 +446,21 @@ export function SettingsGoogleDrive() {
             ? t("google_drive_reauth_description")
             : t("google_drive_description")}
         </p>
+
+        {connectFailureToShow && (
+          <div className="settings-google-drive__error" role="alert">
+            <p className="settings-google-drive__error-message">
+              {t(connectFailureToShow.messageKey)}
+            </p>
+            {connectFailureToShow.detail && (
+              <p className="settings-google-drive__error-detail">
+                {t("google_drive_connect_error_details", {
+                  detail: connectFailureToShow.detail,
+                })}
+              </p>
+            )}
+          </div>
+        )}
 
         <TextField
           label={t("google_drive_client_id_label")}

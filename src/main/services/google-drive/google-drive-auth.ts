@@ -1,14 +1,21 @@
-import { createServer } from "node:http";
-import axios, { isAxiosError } from "axios";
+import axios from "axios";
 import { safeStorage, shell } from "electron";
 
 import { db, levelKeys } from "@main/level";
-import type { GoogleDriveAccount, GoogleDriveConnectionStatus } from "@types";
+import { getGoogleDriveErrorDetail, getGoogleDriveErrorMarker } from "@shared";
+import type {
+  GoogleDriveAccount,
+  GoogleDriveConnectError,
+  GoogleDriveConnectionStatus,
+} from "@types";
 
 import { logger } from "../logger.js";
 import {
+  startGoogleDriveAuthorizationRedirect,
+  type GoogleDriveAuthorizationRedirect,
+} from "./google-drive-authorized-redirect.js";
+import {
   GOOGLE_DRIVE_ACCESS_TOKEN_SKEW_MS,
-  GOOGLE_DRIVE_AUTHORIZATION_TIMEOUT_MS,
   GOOGLE_DRIVE_CALLBACK_PATH,
   GOOGLE_DRIVE_LOOPBACK_HOST,
   GOOGLE_DRIVE_REQUEST_TIMEOUT_MS,
@@ -16,7 +23,6 @@ import {
   GOOGLE_OAUTH_AUTHORIZATION_URL,
   GOOGLE_OAUTH_REVOKE_URL,
   GOOGLE_OAUTH_TOKEN_URL,
-  GOOGLE_OAUTH_USERINFO_URL,
 } from "./google-drive-constants.js";
 import {
   GoogleDriveConnectCancelledError,
@@ -26,10 +32,14 @@ import {
   GoogleDriveNotConnectedError,
   GoogleDriveReauthRequiredError,
 } from "./google-drive-errors.js";
+import { googleDriveOAuthClient } from "./google-drive-oauth-client.js";
+import {
+  createGoogleDriveOAuthError,
+  getGoogleDriveOAuthErrorCode,
+} from "./google-drive-oauth-error.js";
 import {
   createGoogleDriveOAuthState,
   createGoogleDrivePkcePair,
-  isMatchingGoogleDriveOAuthState,
 } from "./google-drive-pkce.js";
 import {
   getGoogleDriveSettings,
@@ -63,53 +73,18 @@ interface GoogleDriveTokenResponse {
   scope?: string;
 }
 
-interface GoogleDriveUserInfoResponse {
-  email?: string;
-  name?: string;
-  picture?: string;
-}
-
-interface GoogleDriveAuthorizationRedirect {
-  port: number;
-  code: Promise<string>;
-  abort: () => void;
-}
-
 const FORM_HEADERS = { "Content-Type": "application/x-www-form-urlencoded" };
 const DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
-
-const getTokenErrorCode = (error: unknown) => {
-  if (!isAxiosError(error)) return null;
-  const data = error.response?.data;
-  if (typeof data !== "object" || data === null) return null;
-  const code = (data as { error?: unknown }).error;
-  return typeof code === "string" ? code : null;
-};
-
-const getTokenErrorDescription = (error: unknown) => {
-  if (!isAxiosError(error)) return null;
-  const data = error.response?.data;
-  if (typeof data !== "object" || data === null) return null;
-  const description = (data as { error_description?: unknown })
-    .error_description;
-  return typeof description === "string" && description.length > 0
-    ? description
-    : null;
-};
-
-const buildAuthorizationResultPage = (message: string) => `<!doctype html>
-<html>
-  <head><meta charset="utf-8" /><title>Hydra Save Sync</title></head>
-  <body style="background:#1c1c1c;color:#f5f5f5;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-    <p>${message}</p>
-  </body>
-</html>`;
+const INVALID_CLIENT_MARKER = "google_drive_oauth_invalid_client";
 
 export class GoogleDriveAuth {
   private static session: GoogleDriveAuthSession | null = null;
   private static loaded = false;
   private static refreshPromise: Promise<string> | null = null;
-  private static activeAuthorization: { abort: () => void } | null = null;
+  private static activeAuthorization: GoogleDriveAuthorizationRedirect | null =
+    null;
+  private static connecting = false;
+  private static connectError: GoogleDriveConnectError | null = null;
 
   /** Re-validates a stored session on startup without prompting the user. */
   static async setup() {
@@ -131,6 +106,10 @@ export class GoogleDriveAuth {
       this.load(),
       getGoogleDriveSettings(),
     ]);
+    const connectError =
+      this.connectError?.clientId === (settings.clientId ?? null)
+        ? this.connectError
+        : await this.getStoredClientRejection(settings);
 
     return {
       state: !session
@@ -140,6 +119,7 @@ export class GoogleDriveAuth {
           : "connected",
       account: session?.account ?? null,
       settings,
+      connectError,
     };
   }
 
@@ -170,16 +150,20 @@ export class GoogleDriveAuth {
     if (!isValidGoogleDriveClientId(resolvedClientId)) {
       throw new GoogleDriveNotConfiguredError();
     }
-    if (this.activeAuthorization) {
+    if (this.connecting || this.activeAuthorization) {
       throw new GoogleDriveConnectInProgressError();
     }
 
+    this.connecting = true;
     const pkce = createGoogleDrivePkcePair();
     const state = createGoogleDriveOAuthState();
-    const authorization = await this.openAuthorizationRedirect(state);
-    this.activeAuthorization = { abort: authorization.abort };
 
     try {
+      const authorization = await startGoogleDriveAuthorizationRedirect({
+        expectedState: state,
+      });
+      this.activeAuthorization = authorization;
+
       const redirectUri = `http://${GOOGLE_DRIVE_LOOPBACK_HOST}:${authorization.port}${GOOGLE_DRIVE_CALLBACK_PATH}`;
       const authorizationUrl = new URL(GOOGLE_OAUTH_AUTHORIZATION_URL);
       authorizationUrl.searchParams.set("client_id", resolvedClientId);
@@ -193,16 +177,23 @@ export class GoogleDriveAuth {
       authorizationUrl.searchParams.set("include_granted_scopes", "true");
       authorizationUrl.searchParams.set("state", state);
 
+      logger.info(
+        `Google Drive authorization started for client ${resolvedClientId} on port ${authorization.port}`
+      );
       await shell.openExternal(authorizationUrl.toString());
 
       const code = await authorization.code;
-      const tokens = await this.exchangeAuthorizationCode({
+      logger.info("Google Drive authorization code received from the browser");
+
+      const tokens = await googleDriveOAuthClient.exchangeAuthorizationCode({
         clientId: resolvedClientId,
         code,
         codeVerifier: pkce.verifier,
         redirectUri,
       });
-      const account = await this.fetchAccount(tokens.accessToken);
+      const account = await googleDriveOAuthClient.fetchAccount(
+        tokens.accessToken
+      );
       const session: GoogleDriveAuthSession = {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
@@ -212,13 +203,31 @@ export class GoogleDriveAuth {
         account,
       };
 
-      await this.persistSession(session);
+      try {
+        await this.persistSession(session);
+      } catch (error) {
+        throw createGoogleDriveOAuthError(
+          "google_drive_oauth_session_persist_failed",
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+
       this.session = session;
       this.loaded = true;
+      this.connectError = null;
+      await this.clearStoredClientRejection();
+      logger.info(
+        `Google Drive connected as ${account.email} (client ${resolvedClientId})`
+      );
+
       return account;
+    } catch (error) {
+      await this.recordConnectFailure(resolvedClientId, error);
+      throw error;
     } finally {
-      authorization.abort();
+      this.activeAuthorization?.abort();
       this.activeAuthorization = null;
+      this.connecting = false;
     }
   }
 
@@ -242,6 +251,7 @@ export class GoogleDriveAuth {
         );
     }
     await this.clearConnection();
+    await this.clearStoredClientRejection();
   }
 
   /** Drops local credentials without calling Google (e.g. client ID changed). */
@@ -249,6 +259,7 @@ export class GoogleDriveAuth {
     this.session = null;
     this.loaded = true;
     this.refreshPromise = null;
+    this.connectError = null;
     await db.del(levelKeys.googleDriveAuth).catch(() => undefined);
   }
 
@@ -256,6 +267,73 @@ export class GoogleDriveAuth {
     this.session = null;
     this.loaded = false;
     this.refreshPromise = null;
+    this.activeAuthorization = null;
+    this.connecting = false;
+    this.connectError = null;
+  }
+
+  /**
+   * Records why the last attempt failed and keeps the marker plus Google's own
+   * description, so the settings card never has to guess at the cause.
+   */
+  private static async recordConnectFailure(
+    clientId: string,
+    error: unknown
+  ): Promise<void> {
+    if (error instanceof GoogleDriveConnectCancelledError) {
+      logger.info("Google Drive authorization was cancelled by the user");
+      return;
+    }
+
+    const marker = getGoogleDriveErrorMarker(error);
+    const detail = getGoogleDriveErrorDetail(error);
+    const at = new Date().toISOString();
+
+    this.connectError = { marker, detail, clientId, at };
+
+    logger.error(
+      `Google Drive authorization failed (${marker ?? "unknown cause"}, client ${clientId}): ${detail}`
+    );
+
+    if (marker === INVALID_CLIENT_MARKER) {
+      // Google itself rejected this client ID (e.g. a Web client without a
+      // secret), so remember it and warn before the next browser round-trip.
+      await db
+        .put(levelKeys.googleDriveClientRejection, this.connectError, {
+          valueEncoding: "json",
+        })
+        .catch((error) =>
+          logger.warn(
+            "Failed to persist the Google Drive client rejection",
+            error
+          )
+        );
+    }
+  }
+
+  private static async getStoredClientRejection(settings: {
+    clientId: string | null;
+  }): Promise<GoogleDriveConnectError | null> {
+    if (!settings.clientId) return null;
+
+    try {
+      const stored = await db.get<string, GoogleDriveConnectError | null>(
+        levelKeys.googleDriveClientRejection,
+        { valueEncoding: "json" }
+      );
+      if (!stored) return null;
+      if (stored.clientId !== settings.clientId) {
+        await this.clearStoredClientRejection();
+        return null;
+      }
+      return stored;
+    } catch {
+      return null;
+    }
+  }
+
+  private static clearStoredClientRejection() {
+    return db.del(levelKeys.googleDriveClientRejection).catch(() => undefined);
   }
 
   private static async load(): Promise<GoogleDriveAuthSession | null> {
@@ -293,14 +371,7 @@ export class GoogleDriveAuth {
       logger.warn(
         "Google Drive credentials cannot be decrypted without OS encryption support; reconnect required"
       );
-      return {
-        accessToken: "",
-        refreshToken: "",
-        expiryDate: 0,
-        scope: stored.scope,
-        needsReauth: true,
-        account: stored.account,
-      };
+      return this.toReauthSession(stored);
     }
 
     try {
@@ -314,15 +385,21 @@ export class GoogleDriveAuth {
       };
     } catch (error) {
       logger.warn("Failed to decrypt Google Drive credentials", error);
-      return {
-        accessToken: "",
-        refreshToken: "",
-        expiryDate: 0,
-        scope: stored.scope,
-        needsReauth: true,
-        account: stored.account,
-      };
+      return this.toReauthSession(stored);
     }
+  }
+
+  private static toReauthSession(
+    stored: StoredGoogleDriveAuthRecord
+  ): GoogleDriveAuthSession {
+    return {
+      accessToken: "",
+      refreshToken: "",
+      expiryDate: 0,
+      scope: stored.scope,
+      needsReauth: true,
+      account: stored.account,
+    };
   }
 
   private static async persistSession(session: GoogleDriveAuthSession) {
@@ -418,7 +495,7 @@ export class GoogleDriveAuth {
       this.loaded = true;
       return accessToken;
     } catch (error) {
-      if (getTokenErrorCode(error) === "invalid_grant") {
+      if (getGoogleDriveOAuthErrorCode(error) === "invalid_grant") {
         await this.markReauthRequired(session);
         throw new GoogleDriveReauthRequiredError();
       }
@@ -437,208 +514,5 @@ export class GoogleDriveAuth {
     );
     this.session = next;
     this.loaded = true;
-  }
-
-  private static async exchangeAuthorizationCode(params: {
-    clientId: string;
-    code: string;
-    codeVerifier: string;
-    redirectUri: string;
-  }) {
-    let data: GoogleDriveTokenResponse;
-    try {
-      const response = await axios.post<GoogleDriveTokenResponse>(
-        GOOGLE_OAUTH_TOKEN_URL,
-        new URLSearchParams({
-          code: params.code,
-          client_id: params.clientId,
-          code_verifier: params.codeVerifier,
-          grant_type: "authorization_code",
-          redirect_uri: params.redirectUri,
-        }).toString(),
-        { headers: FORM_HEADERS, timeout: GOOGLE_DRIVE_REQUEST_TIMEOUT_MS }
-      );
-      data = response.data;
-    } catch (error) {
-      throw this.describeOAuthFailure(error);
-    }
-
-    if (!data.access_token || !data.refresh_token) {
-      throw new GoogleDriveError(
-        "Google Drive authorization did not return the expected tokens"
-      );
-    }
-
-    return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresInSeconds:
-        typeof data.expires_in === "number" && data.expires_in > 0
-          ? data.expires_in
-          : DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS,
-      scope: data.scope ?? GOOGLE_DRIVE_SCOPES.join(" "),
-    };
-  }
-
-  private static describeOAuthFailure(error: unknown): GoogleDriveError {
-    const code = getTokenErrorCode(error);
-    const description = getTokenErrorDescription(error);
-    const detail = description ?? code;
-    return new GoogleDriveError(
-      detail
-        ? `Google Drive authorization failed: ${detail}`
-        : "Google Drive authorization failed"
-    );
-  }
-
-  private static async fetchAccount(
-    accessToken: string
-  ): Promise<GoogleDriveAccount> {
-    const response = await axios.get<GoogleDriveUserInfoResponse>(
-      GOOGLE_OAUTH_USERINFO_URL,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        timeout: GOOGLE_DRIVE_REQUEST_TIMEOUT_MS,
-      }
-    );
-    const email = response.data.email?.trim();
-    if (!email) {
-      throw new GoogleDriveError(
-        "Google Drive account email could not be read"
-      );
-    }
-
-    return {
-      email,
-      displayName: response.data.name?.trim() || email,
-      photoUrl: response.data.picture?.trim() || null,
-      connectedAt: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Starts the loopback redirect listener Google sends the browser back to.
-   * The consent screen itself always opens in the user's system browser.
-   */
-  private static openAuthorizationRedirect(
-    expectedState: string
-  ): Promise<GoogleDriveAuthorizationRedirect> {
-    return new Promise((resolveSetup, rejectSetup) => {
-      let settled = false;
-      let timeout: ReturnType<typeof setTimeout> | null = null;
-      let server: ReturnType<typeof createServer> | null = null;
-      let resolveCode: (code: string) => void = () => undefined;
-      let rejectCode: (error: Error) => void = () => undefined;
-
-      const code = new Promise<string>((resolve, reject) => {
-        resolveCode = resolve;
-        rejectCode = reject;
-      });
-      void code.catch(() => undefined);
-
-      const closeServer = () => {
-        if (timeout) {
-          clearTimeout(timeout);
-          timeout = null;
-        }
-        server?.close();
-      };
-
-      const settle = (error: Error | null, value?: string) => {
-        if (settled) return;
-        settled = true;
-        closeServer();
-        if (error) rejectCode(error);
-        else resolveCode(value ?? "");
-      };
-
-      server = createServer((request, response) => {
-        const requestUrl = new URL(
-          request.url ?? "/",
-          `http://${GOOGLE_DRIVE_LOOPBACK_HOST}`
-        );
-        if (requestUrl.pathname !== GOOGLE_DRIVE_CALLBACK_PATH) {
-          response.writeHead(404);
-          response.end();
-          return;
-        }
-
-        const respond = (message: string) => {
-          response.writeHead(200, {
-            "Content-Type": "text/html; charset=utf-8",
-          });
-          response.end(buildAuthorizationResultPage(message));
-        };
-
-        const errorCode = requestUrl.searchParams.get("error");
-        if (errorCode) {
-          respond("Google Drive authorization was denied. Close this tab.");
-          settle(
-            new GoogleDriveError(
-              `Google Drive authorization was denied: ${errorCode}`
-            )
-          );
-          return;
-        }
-
-        if (
-          !isMatchingGoogleDriveOAuthState(
-            expectedState,
-            requestUrl.searchParams.get("state")
-          )
-        ) {
-          respond("Google Drive authorization could not be verified.");
-          settle(
-            new GoogleDriveError("Google Drive authorization state mismatch")
-          );
-          return;
-        }
-
-        const authorizationCode = requestUrl.searchParams.get("code");
-        if (!authorizationCode) {
-          respond("Google Drive authorization code was missing.");
-          settle(
-            new GoogleDriveError("Google Drive authorization code was missing")
-          );
-          return;
-        }
-
-        respond("Google Drive connected. You can close this tab.");
-        settle(null, authorizationCode);
-      });
-
-      server.once("error", (error) => {
-        if (settled) return;
-        settled = true;
-        closeServer();
-        rejectSetup(error);
-      });
-
-      server.listen(0, GOOGLE_DRIVE_LOOPBACK_HOST, () => {
-        const address = server?.address();
-        if (!address || typeof address === "string") {
-          const error = new GoogleDriveError(
-            "Google Drive authorization listener failed to start"
-          );
-          settled = true;
-          closeServer();
-          rejectSetup(error);
-          return;
-        }
-
-        timeout = setTimeout(
-          () =>
-            settle(
-              new GoogleDriveError("Google Drive authorization timed out")
-            ),
-          GOOGLE_DRIVE_AUTHORIZATION_TIMEOUT_MS
-        );
-        resolveSetup({
-          port: address.port,
-          code,
-          abort: () => settle(new GoogleDriveConnectCancelledError()),
-        });
-      });
-    });
   }
 }

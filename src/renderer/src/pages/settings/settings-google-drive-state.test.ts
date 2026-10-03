@@ -3,10 +3,7 @@ import { describe, it } from "node:test";
 
 import type { GoogleDriveConnectionStatus, GoogleDriveSettings } from "@types";
 
-import {
-  getGoogleDriveConnectErrorMessageKey,
-  getGoogleDriveIntegrationPresentation,
-} from "./settings-google-drive-state.js";
+import { getGoogleDriveIntegrationPresentation } from "./settings-google-drive-state.js";
 
 const settings: GoogleDriveSettings = {
   clientId: "123456789012-abcdefghijklmnop.apps.googleusercontent.com",
@@ -22,6 +19,7 @@ const status = (
   state: "disconnected",
   account: null,
   settings,
+  connectError: null,
   ...overrides,
 });
 
@@ -99,20 +97,21 @@ describe("google drive integration presentation", () => {
     assert.equal(unconfigured.statusKey, "integration_status_not_connected");
   });
 
-  it("maps a cancelled authorization to its own message", () => {
-    assert.equal(
-      getGoogleDriveConnectErrorMessageKey(
-        new Error("Google Drive authorization was cancelled")
-      ),
-      "google_drive_connect_cancelled"
-    );
-    assert.equal(
-      getGoogleDriveConnectErrorMessageKey(new Error("state mismatch")),
-      "google_drive_connect_error"
-    );
-    assert.equal(
-      getGoogleDriveConnectErrorMessageKey(undefined),
-      "google_drive_connect_error"
-    );
+  it("reports a recorded failure as a failed connection", () => {
+    const failed = getGoogleDriveIntegrationPresentation({
+      status: status({
+        connectError: {
+          marker: "google_drive_oauth_invalid_client",
+          detail: "The OAuth client was not found.",
+          clientId: settings.clientId,
+          at: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+      isConnecting: false,
+      hasConnectFailed: true,
+    });
+
+    assert.equal(failed.viewState, "failed");
+    assert.equal(failed.statusKey, "google_drive_status_connect_failed");
   });
 });

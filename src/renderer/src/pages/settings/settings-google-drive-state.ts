@@ -76,13 +76,3 @@ export const getGoogleDriveIntegrationPresentation = (params: {
     statusTone: "neutral",
   };
 };
-
-export const getGoogleDriveConnectErrorMessageKey = (
-  error: unknown
-): "google_drive_connect_cancelled" | "google_drive_connect_error" => {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-
-  return /cancel/i.test(message)
-    ? "google_drive_connect_cancelled"
-    : "google_drive_connect_error";
-};

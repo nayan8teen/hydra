@@ -21,10 +21,22 @@ export type GoogleDriveConnectionState =
   | "connected"
   | "needs-reauth";
 
+/**
+ * Why the last authorization attempt failed, kept as a stable marker plus the
+ * provider's own description so the settings card can show the real cause.
+ */
+export interface GoogleDriveConnectError {
+  marker: string | null;
+  detail: string;
+  clientId: string | null;
+  at: string;
+}
+
 export interface GoogleDriveConnectionStatus {
   state: GoogleDriveConnectionState;
   account: GoogleDriveAccount | null;
   settings: GoogleDriveSettings;
+  connectError: GoogleDriveConnectError | null;
 }
 
 export interface GoogleDriveFolderRef {

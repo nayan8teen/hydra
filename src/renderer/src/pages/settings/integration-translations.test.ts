@@ -17,6 +17,7 @@ const INTEGRATION_DISPLAY_KEYS = [
 ] as const;
 
 const INTEGRATION_SOURCE_FILES = [
+  "src/shared/google-drive.ts",
   "src/renderer/src/pages/settings/settings-google-drive.tsx",
   "src/renderer/src/pages/settings/settings-google-drive-state.ts",
   "src/renderer/src/pages/settings/settings-steam.tsx",
