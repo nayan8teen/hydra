@@ -5,28 +5,19 @@ import {
   db,
   levelKeys,
 } from "@main/level";
-import type { GameShop, User } from "@types";
+import type { GameShop } from "@types";
 
-import { isCloudSaveSyncAnchorKeyForGame } from "./sync-anchor-key";
-
-const getCurrentUserId = async () => {
-  const user = await db.get<string, User>(levelKeys.user, {
-    valueEncoding: "json",
-  });
-  if (!user?.id) throw new Error("Cloud save deletion requires a user");
-  return user.id;
-};
+import { isCloudSaveSyncAnchorKeyForAnyIdentity } from "./sync-anchor-key";
 
 export const clearCloudSaveLocalState = async (
   objectId: string,
   shop: GameShop,
   customPathStorageKey: string
 ) => {
-  const userId = await getCurrentUserId();
   const cacheKey = levelKeys.game(shop, objectId);
   const anchorKeys: string[] = [];
   for await (const [key] of cloudSaveSyncAnchorsSublevel.iterator()) {
-    if (isCloudSaveSyncAnchorKeyForGame(key, userId, shop, objectId)) {
+    if (isCloudSaveSyncAnchorKeyForAnyIdentity(key, shop, objectId)) {
       anchorKeys.push(key);
     }
   }

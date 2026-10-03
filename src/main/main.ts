@@ -18,6 +18,7 @@ import {
   uploadGamesBatch,
   startMainLoop,
   Ludusavi,
+  GoogleDriveService,
   Lock,
   DeckyPlugin,
   DownloadSourcesChecker,
@@ -77,6 +78,10 @@ export const loadState = async () => {
   Wine.syncUserPreferences(userPreferences);
 
   await import("./events");
+
+  void GoogleDriveService.setup().catch((error) =>
+    logger.warn("Google Drive setup failed", error)
+  );
 
   if (userPreferences?.realDebridApiToken) {
     RealDebridClient.authorize(userPreferences.realDebridApiToken);

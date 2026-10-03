@@ -17,6 +17,8 @@ const INTEGRATION_DISPLAY_KEYS = [
 ] as const;
 
 const INTEGRATION_SOURCE_FILES = [
+  "src/renderer/src/pages/settings/settings-google-drive.tsx",
+  "src/renderer/src/pages/settings/settings-google-drive-state.ts",
   "src/renderer/src/pages/settings/settings-steam.tsx",
   "src/renderer/src/pages/settings/settings-steam-state.ts",
   "src/renderer/src/pages/settings/settings-retroachievements.tsx",
@@ -44,7 +46,7 @@ const readSettingsTranslations = (locale: string) => {
 const getIntegrationKeys = () => {
   const keys = new Set(["cancel", "retroachievements", "steam"]);
   const integrationKeyPattern =
-    /["']((?:integration|retroachievements|steam)_[a-z0-9_]+)["']/g;
+    /["']((?:integration|retroachievements|steam|google_drive)_[a-z0-9_]+)["']/g;
 
   for (const sourceFile of INTEGRATION_SOURCE_FILES) {
     const source = fs.readFileSync(

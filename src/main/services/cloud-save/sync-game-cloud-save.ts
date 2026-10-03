@@ -15,7 +15,10 @@ import { isGameRunning } from "../game-running-state";
 import { analyzeCloudSaveState } from "./analyze-cloud-save-state";
 import { assertCloudSaveRuntimeAvailable } from "./assert-cloud-save-executable";
 import { clearCloudSaveLocalState } from "./clear-cloud-save-local-state";
-import { assertCloudSaveSubscription } from "./cloud-save-access";
+import {
+  assertCloudSaveRemoteAccess,
+  resolveCloudSaveProvider,
+} from "./remote-backend";
 import { cloudSaveFileKey } from "./cloud-save-contract";
 import { getCloudSaveGameContext } from "./cloud-save-game-context";
 import { getEmulatorSaveProvider } from "./emulator-save-provider";
@@ -1022,7 +1025,9 @@ export const syncGameCloudSave = async (
   suppliedContext?: Awaited<ReturnType<typeof getCloudSaveGameContext>>,
   expectedRemoteHash?: string | null
 ) => {
-  assertCloudSaveSubscription();
+  await assertCloudSaveRemoteAccess(
+    await resolveCloudSaveProvider(objectId, shop)
+  );
   await assertCloudSaveRuntimeAvailable(objectId, shop);
   if (isGameRunning(objectId, shop)) {
     throw new Error("cloud_save_game_running");
@@ -1072,7 +1077,9 @@ export const resolveCloudSaveConflict = async (
   resolution: CloudSaveConflictResolution,
   onProgress?: ProgressCallback
 ) => {
-  assertCloudSaveSubscription();
+  await assertCloudSaveRemoteAccess(
+    await resolveCloudSaveProvider(objectId, shop)
+  );
   await assertCloudSaveRuntimeAvailable(objectId, shop);
 
   if (isGameRunning(objectId, shop)) {

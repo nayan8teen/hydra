@@ -55,6 +55,9 @@ import type {
   RetroArchLocalBatteryCandidate,
   RetroArchLegacyBatteryCandidate,
   CloudSaveV2FileDetails,
+  GoogleDriveAccount,
+  GoogleDriveConnectionStatus,
+  GoogleDriveSettings,
   CloudSaveSyncIpcProgressPayload,
   CloudSaveSyncProgressPayload,
   SyncCloudSaveOnGamePageResult,
@@ -167,6 +170,24 @@ contextBridge.exposeInMainWorld("electron", {
       objectId,
       shop
     ) as Promise<CloudSaveOverview>,
+  getGoogleDriveStatus: () =>
+    ipcRenderer.invoke(
+      "getGoogleDriveStatus"
+    ) as Promise<GoogleDriveConnectionStatus>,
+  setGoogleDriveSettings: (patch: Partial<GoogleDriveSettings>) =>
+    ipcRenderer.invoke(
+      "setGoogleDriveSettings",
+      patch
+    ) as Promise<GoogleDriveSettings>,
+  connectGoogleDrive: (clientId?: string) =>
+    ipcRenderer.invoke(
+      "connectGoogleDrive",
+      clientId
+    ) as Promise<GoogleDriveAccount>,
+  cancelGoogleDriveConnect: () =>
+    ipcRenderer.invoke("cancelGoogleDriveConnect") as Promise<void>,
+  disconnectGoogleDrive: (options?: { deleteRemoteData?: boolean }) =>
+    ipcRenderer.invoke("disconnectGoogleDrive", options) as Promise<void>,
   getCloudSaveV2FileDetails: (objectId: string, shop: GameShop) =>
     ipcRenderer.invoke(
       "getCloudSaveV2FileDetails",

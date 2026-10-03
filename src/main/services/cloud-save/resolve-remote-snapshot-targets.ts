@@ -11,8 +11,11 @@ import type {
   ResolveRestoreTargetsResult,
 } from "@types";
 
+import { GoogleDriveStorage } from "../google-drive";
+import { toGoogleDriveRestoreManifest } from "../google-drive/google-drive-manifest";
 import { NativeAddon } from "../native-addon";
 import { validateRestoreManifest } from "./cloud-save-contract";
+import { getCloudSaveProviderForSnapshot } from "./remote-backend";
 import { getCloudSaveGameContext } from "./cloud-save-game-context";
 import { cloudSaveCustomPathContextFromPathContext } from "./custom-path";
 import { customPathToCloudSaveRule } from "./custom-path-store";
@@ -36,16 +39,31 @@ const isWinePrefixValid = (winePrefixPath?: string) => {
   }
 };
 
+const getGoogleDriveRestoreManifest = async (
+  snapshot: RemoteSnapshotSummary | RemoteGameSnapshot
+): Promise<RestoreManifestResponse> => {
+  const manifestRef = await GoogleDriveStorage.readManifestByFileId(
+    snapshot.id
+  );
+  if (!manifestRef) {
+    throw new Error("cloud_save_restore_snapshot_not_found");
+  }
+  return toGoogleDriveRestoreManifest(manifestRef);
+};
+
 export const getRemoteSnapshotRestoreManifest = async (
   snapshot: RemoteSnapshotSummary | RemoteGameSnapshot
 ): Promise<RestoreManifestResponse> => {
-  const manifest = validateRestoreManifest(
-    await HydraApi.get<unknown>(
-      "/profile/cloud-saves/snapshot-restore-manifest",
-      { snapshotId: snapshot.id },
-      { needsAuth: true, needsSubscription: true }
-    )
-  );
+  const manifest =
+    getCloudSaveProviderForSnapshot(snapshot) === "google-drive"
+      ? await getGoogleDriveRestoreManifest(snapshot)
+      : validateRestoreManifest(
+          await HydraApi.get<unknown>(
+            "/profile/cloud-saves/snapshot-restore-manifest",
+            { snapshotId: snapshot.id },
+            { needsAuth: true, needsSubscription: true }
+          )
+        );
   const totalSizeBytes = manifest.files.reduce(
     (total, file) => total + file.sizeBytes,
     0
