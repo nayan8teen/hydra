@@ -1,25 +1,37 @@
 import { cloudSaveSyncAnchorsSublevel, db, levelKeys } from "@main/level";
-import type { CloudSaveSyncAnchor, GameShop, User } from "@types";
+import type {
+  CloudSaveRemoteProvider,
+  CloudSaveSyncAnchor,
+  GameShop,
+  User,
+} from "@types";
 
 import {
   CLOUD_SAVE_HASH_PATTERN,
   cloudSaveFileKey,
 } from "./cloud-save-contract";
+import { normalizeCloudSaveProvider } from "./cloud-save-provider-policy.js";
+import {
+  getCloudSaveAnchorIdentityForProvider,
+  resolveCloudSaveProvider,
+} from "./remote-backend";
 import {
   getCloudSaveSyncAnchorEnvironmentFromKey,
-  isCloudSaveSyncAnchorKeyForGame,
+  isCloudSaveSyncAnchorKeyForAnyIdentity,
 } from "./sync-anchor-key";
 import { hasCloudSaveV4AnchorSchema } from "./sync-anchor-policy";
 
 const isValidAnchor = (
   anchor: CloudSaveSyncAnchor | null,
-  environmentId: string
+  environmentId: string,
+  provider: CloudSaveRemoteProvider
 ) => {
   if (
     !anchor ||
     !hasCloudSaveV4AnchorSchema(anchor) ||
     !anchor.environmentId ||
     anchor.environmentId !== environmentId ||
+    normalizeCloudSaveProvider(anchor.provider) !== provider ||
     !anchor.baseSnapshotId ||
     !Number.isSafeInteger(anchor.baseVersion) ||
     anchor.baseVersion < 1 ||
@@ -57,30 +69,38 @@ const getCurrentUserId = async () => {
   return user.id;
 };
 
-const getLegacyAnchorKey = async (shop: GameShop, objectId: string) =>
-  JSON.stringify([await getCurrentUserId(), shop, objectId]);
+/**
+ * Anchor identity: the Hydra account for Hydra and the Google account for
+ * Drive, so a Drive-only user never needs a Hydra login to sync.
+ */
+const getAnchorIdentity = async (provider: CloudSaveRemoteProvider) =>
+  provider === "google-drive"
+    ? getCloudSaveAnchorIdentityForProvider(provider, "")
+    : getCloudSaveAnchorIdentityForProvider(provider, await getCurrentUserId());
 
-const getEnvironmentAnchorKey = async (
+const getLegacyAnchorKey = (
+  identity: string,
+  shop: GameShop,
+  objectId: string
+) => JSON.stringify([identity, shop, objectId]);
+
+const getEnvironmentAnchorKey = (
+  identity: string,
   shop: GameShop,
   objectId: string,
   environmentId: string
-) =>
-  JSON.stringify([
-    await getCurrentUserId(),
-    shop,
-    objectId,
-    "environment",
-    environmentId,
-  ]);
+) => JSON.stringify([identity, shop, objectId, "environment", environmentId]);
 
 export const getCloudSaveSyncAnchorForEnvironment = async (
   shop: GameShop,
   objectId: string,
   environmentId: string
 ) => {
-  const key = await getEnvironmentAnchorKey(shop, objectId, environmentId);
+  const provider = await resolveCloudSaveProvider(objectId, shop);
+  const identity = await getAnchorIdentity(provider);
+  const key = getEnvironmentAnchorKey(identity, shop, objectId, environmentId);
   const anchor = (await cloudSaveSyncAnchorsSublevel.get(key)) ?? null;
-  if (!isValidAnchor(anchor, environmentId)) {
+  if (!isValidAnchor(anchor, environmentId, provider)) {
     if (anchor) await cloudSaveSyncAnchorsSublevel.del(key);
     return null;
   }
@@ -92,18 +112,19 @@ export const getCloudSaveSyncAnchorForSnapshot = async (
   objectId: string,
   snapshotId: string
 ) => {
-  const userId = await getCurrentUserId();
+  const provider = await resolveCloudSaveProvider(objectId, shop);
+  const identity = await getAnchorIdentity(provider);
   let matched: CloudSaveSyncAnchor | null = null;
   for await (const [key, anchor] of cloudSaveSyncAnchorsSublevel.iterator()) {
     const environmentId = getCloudSaveSyncAnchorEnvironmentFromKey(
       key,
-      userId,
+      identity,
       shop,
       objectId
     );
     if (
       environmentId &&
-      isValidAnchor(anchor, environmentId) &&
+      isValidAnchor(anchor, environmentId, provider) &&
       anchor.baseSnapshotId === snapshotId &&
       (!matched || Date.parse(anchor.updatedAt) > Date.parse(matched.updatedAt))
     ) {
@@ -119,6 +140,8 @@ export const getCloudSaveSyncAnchor = async (
   environmentId: string,
   options: { allowEnvironmentFallback?: boolean } = {}
 ) => {
+  const provider = await resolveCloudSaveProvider(objectId, shop);
+  const identity = await getAnchorIdentity(provider);
   const environmentAnchor = await getCloudSaveSyncAnchorForEnvironment(
     shop,
     objectId,
@@ -127,11 +150,10 @@ export const getCloudSaveSyncAnchor = async (
   if (environmentAnchor) return environmentAnchor;
 
   await cloudSaveSyncAnchorsSublevel
-    .del(await getLegacyAnchorKey(shop, objectId))
+    .del(getLegacyAnchorKey(identity, shop, objectId))
     .catch(() => undefined);
   if (!options.allowEnvironmentFallback) return null;
 
-  const userId = await getCurrentUserId();
   let latestAnchor: CloudSaveSyncAnchor | null = null;
   let latestUpdatedAt = Number.NEGATIVE_INFINITY;
 
@@ -141,13 +163,13 @@ export const getCloudSaveSyncAnchor = async (
   ] of cloudSaveSyncAnchorsSublevel.iterator()) {
     const candidateEnvironmentId = getCloudSaveSyncAnchorEnvironmentFromKey(
       key,
-      userId,
+      identity,
       shop,
       objectId
     );
     if (
       !candidateEnvironmentId ||
-      !isValidAnchor(candidate, candidateEnvironmentId)
+      !isValidAnchor(candidate, candidateEnvironmentId, provider)
     ) {
       continue;
     }
@@ -170,6 +192,8 @@ export const saveCloudSaveSyncAnchor = async (
   if (anchor.schemaVersion !== 4 || anchor.environmentId !== environmentId) {
     throw new Error("Invalid Cloud Save V4 sync anchor");
   }
+  const provider = await resolveCloudSaveProvider(objectId, shop);
+  const identity = await getAnchorIdentity(provider);
   const entries = [...anchor.entries].sort((left, right) =>
     cloudSaveFileKey(left).localeCompare(cloudSaveFileKey(right))
   );
@@ -184,33 +208,34 @@ export const saveCloudSaveSyncAnchor = async (
   }
   const environmentAnchor: CloudSaveSyncAnchor = {
     ...anchor,
+    provider,
     entries,
     unresolvedRemoteEntryIds: [
       ...new Set(anchor.unresolvedRemoteEntryIds),
     ].sort((left, right) => left.localeCompare(right)),
   };
-  if (!isValidAnchor(environmentAnchor, environmentId)) {
+  if (!isValidAnchor(environmentAnchor, environmentId, provider)) {
     throw new Error("Invalid Cloud Save V4 sync anchor");
   }
   await cloudSaveSyncAnchorsSublevel.put(
-    await getEnvironmentAnchorKey(shop, objectId, environmentId),
+    getEnvironmentAnchorKey(identity, shop, objectId, environmentId),
     environmentAnchor
   );
   await cloudSaveSyncAnchorsSublevel
-    .del(await getLegacyAnchorKey(shop, objectId))
+    .del(getLegacyAnchorKey(identity, shop, objectId))
     .catch(() => undefined);
 };
 
+/** Clears every backend's anchors for a game, with or without a Hydra login. */
 export const clearCloudSaveSyncAnchors = async (
   shop: GameShop,
   objectId: string
 ) => {
-  const userId = await getCurrentUserId();
   const batch = cloudSaveSyncAnchorsSublevel.batch();
   let hasOperations = false;
 
   for await (const [key] of cloudSaveSyncAnchorsSublevel.iterator()) {
-    if (isCloudSaveSyncAnchorKeyForGame(key, userId, shop, objectId)) {
+    if (isCloudSaveSyncAnchorKeyForAnyIdentity(key, shop, objectId)) {
       batch.del(key);
       hasOperations = true;
     }

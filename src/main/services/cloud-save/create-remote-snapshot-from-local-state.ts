@@ -20,6 +20,8 @@ import {
   cloudSaveFileKey,
   isNonEmptyString,
 } from "./cloud-save-contract";
+import { createGoogleDriveSnapshotFromLocalState } from "./create-google-drive-snapshot";
+import { resolveCloudSaveProvider } from "./remote-backend";
 import { saveCloudSaveSyncAnchor } from "./sync-anchor";
 import {
   isCloudSaveCommitTransportFailure,
@@ -133,6 +135,24 @@ export const createRemoteSnapshotFromLocalState = async (
   const expectedAggregateHash =
     resolvedOptions.aggregateHash ??
     buildCloudSaveAggregateHash({ variants, files });
+
+  if ((await resolveCloudSaveProvider(objectId, shop)) === "google-drive") {
+    return createGoogleDriveSnapshotFromLocalState({
+      objectId,
+      shop,
+      context,
+      files,
+      variants,
+      customPathRawPaths,
+      aggregateHash: expectedAggregateHash,
+      baseVersion: resolvedOptions.baseVersion,
+      expectedSnapshotId: resolvedOptions.expectedSnapshotId ?? null,
+      unresolvedRemoteEntryIds: resolvedOptions.unresolvedRemoteEntryIds,
+      updateAnchor: resolvedOptions.updateAnchor,
+      onProgress,
+      assertEnvironmentCurrent: resolvedOptions.assertEnvironmentCurrent,
+    });
+  }
 
   let committed: CommitSnapshotResponse | null = null;
   for (let prepareAttempt = 0; prepareAttempt < 2; prepareAttempt += 1) {

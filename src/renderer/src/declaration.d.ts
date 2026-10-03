@@ -83,6 +83,9 @@ import type {
   RetroArchLegacyBatteryCandidate,
   CloudSaveOverview,
   CloudSaveV2FileDetails,
+  GoogleDriveAccount,
+  GoogleDriveConnectionStatus,
+  GoogleDriveSettings,
   AchievementSouvenirSyncCleanupResult,
   AchievementSouvenirSyncDetails,
   AchievementSouvenirSyncRetryResult,
@@ -145,6 +148,15 @@ declare global {
       objectId: string,
       shop: GameShop
     ) => Promise<CloudSaveOverview>;
+    getGoogleDriveStatus: () => Promise<GoogleDriveConnectionStatus>;
+    setGoogleDriveSettings: (
+      patch: Partial<GoogleDriveSettings>
+    ) => Promise<GoogleDriveSettings>;
+    connectGoogleDrive: (clientId?: string) => Promise<GoogleDriveAccount>;
+    cancelGoogleDriveConnect: () => Promise<void>;
+    disconnectGoogleDrive: (options?: {
+      deleteRemoteData?: boolean;
+    }) => Promise<void>;
     getCloudSaveV2FileDetails: (
       objectId: string,
       shop: GameShop

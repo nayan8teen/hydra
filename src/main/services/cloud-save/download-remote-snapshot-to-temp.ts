@@ -1,12 +1,15 @@
 import { HydraApi } from "@main/services/hydra-api";
 import { SystemPath } from "@main/services/system-path";
 import type {
+  CloudSaveRemoteProvider,
   DownloadedRestoreFile,
   RestoreDownloadUrlFile,
   RestoreManifestFile,
 } from "@types";
 
 import { NativeAddon } from "../native-addon";
+import { downloadGoogleDriveSnapshotToTemp } from "./download-google-drive-snapshot-to-temp";
+import { normalizeCloudSaveProvider } from "./remote-backend";
 import {
   cloudSaveFileKey,
   validateRestoreDownloadUrls,
@@ -20,9 +23,18 @@ export const downloadRemoteSnapshotToTemp = async (
   snapshotId: string,
   snapshotVersion: number,
   requestedFiles?: RestoreManifestFile[],
-  onProgress?: (processedFiles: number, totalFiles: number) => void
+  onProgress?: (processedFiles: number, totalFiles: number) => void,
+  provider?: CloudSaveRemoteProvider
 ): Promise<DownloadedRestoreFile[]> => {
   if (requestedFiles?.length === 0) return [];
+  if (normalizeCloudSaveProvider(provider) === "google-drive") {
+    return downloadGoogleDriveSnapshotToTemp({
+      snapshotId,
+      snapshotVersion,
+      requestedFiles,
+      onProgress,
+    });
+  }
   const files = validateRestoreDownloadUrls(
     await HydraApi.get<unknown>(
       "/profile/cloud-saves/snapshot-download-urls",

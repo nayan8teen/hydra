@@ -1,0 +1,26 @@
+.settings-google-drive {
+  &__options {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  &__progress {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &__modal {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  &__modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+}

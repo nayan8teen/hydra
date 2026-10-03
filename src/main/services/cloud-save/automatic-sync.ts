@@ -12,12 +12,14 @@ import {
 } from "@shared";
 import { gamesSublevel, levelKeys } from "@main/level";
 
-import { HydraApi } from "../hydra-api";
 import { isGameRunning } from "../game-running-state";
 import { logger } from "../logger";
 import { WindowManager } from "../window-manager";
 import { getCloudSaveAutomaticSyncEnabled } from "./automatic-sync-settings";
-import { canAccessCloudSaves } from "./cloud-save-access";
+import {
+  canAccessCloudSaveRemote,
+  resolveCloudSaveProvider,
+} from "./remote-backend";
 import { syncGameCloudSave } from "./sync-game-cloud-save";
 import { getCloudSaveGameContext } from "./cloud-save-game-context";
 import { getCloudSaveErrorDetails } from "./cloud-save-error-details";
@@ -65,10 +67,9 @@ export const canRunAutomaticCloudSaveSync = async (
   shop: GameShop
 ) => {
   if (
-    !canAccessCloudSaves(
-      HydraApi.isLoggedIn(),
-      HydraApi.hasActiveSubscription()
-    ) ||
+    !(await canAccessCloudSaveRemote(
+      await resolveCloudSaveProvider(objectId, shop)
+    )) ||
     (await isPendingDeletionBlockingAutomaticSync(objectId, shop)) ||
     !(await getCloudSaveAutomaticSyncEnabled(objectId, shop))
   ) {
@@ -116,10 +117,9 @@ export const runAutomaticCloudSaveSyncDetailed = async (
   expectedRemoteHash?: string | null
 ): Promise<AutomaticCloudSaveSyncOutcome> => {
   if (
-    !canAccessCloudSaves(
-      HydraApi.isLoggedIn(),
-      HydraApi.hasActiveSubscription()
-    )
+    !(await canAccessCloudSaveRemote(
+      await resolveCloudSaveProvider(objectId, shop)
+    ))
   ) {
     return { status: "skipped", result: null };
   }
@@ -364,10 +364,9 @@ export const runAutomaticCloudSavePostExit = async (
 ): Promise<SyncGameCloudSaveResult | null> => {
   const guard = consumeCloudSaveLaunchGuard(objectId, shop);
   if (
-    !canAccessCloudSaves(
-      HydraApi.isLoggedIn(),
-      HydraApi.hasActiveSubscription()
-    )
+    !(await canAccessCloudSaveRemote(
+      await resolveCloudSaveProvider(objectId, shop)
+    ))
   ) {
     return null;
   }

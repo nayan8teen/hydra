@@ -5,6 +5,9 @@ export interface CloudSaveGameId {
   objectId: string;
 }
 
+/** Remote storage backing a game's cloud saves. */
+export type CloudSaveRemoteProvider = "hydra" | "google-drive";
+
 export interface CloudSaveRuleCondition {
   os?: string;
   store?: string;
@@ -326,6 +329,7 @@ export interface RemoteSnapshotSummary {
   fileCount: number;
   totalSizeBytes: number;
   aggregateHash: string;
+  provider?: CloudSaveRemoteProvider;
 }
 
 export type CloudSaveState =
@@ -809,6 +813,7 @@ export interface RemoteGameSnapshot {
   fileCount: number;
   totalSizeBytes: number;
   aggregateHash: string;
+  provider?: CloudSaveRemoteProvider;
 }
 
 export interface CloudSaveSyncAnchorEntry extends CloudSaveFileIdentity {
@@ -819,6 +824,8 @@ export interface CloudSaveSyncAnchorEntry extends CloudSaveFileIdentity {
 
 export interface CloudSaveSyncAnchor {
   schemaVersion: 4;
+  /** Remote backend that base state belongs to; absent means Hydra. */
+  provider?: CloudSaveRemoteProvider;
   environmentId: string;
   baseSnapshotId: string;
   baseVersion: number;

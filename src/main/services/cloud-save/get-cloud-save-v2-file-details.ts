@@ -5,8 +5,11 @@ import type {
 } from "@types";
 
 import { analyzeCloudSaveState } from "./analyze-cloud-save-state";
-import { assertCloudSaveSubscription } from "./cloud-save-access";
 import { loadCloudSaveV2FileDetails } from "./cloud-save-v2-file-details";
+import {
+  assertCloudSaveRemoteAccess,
+  resolveCloudSaveProvider,
+} from "./remote-backend";
 import { classifyCloudSaveCustomPathResolutionError } from "./custom-path-binding-state";
 import { getRemoteSnapshotRestoreManifest } from "./resolve-remote-snapshot-targets";
 import { getFirstSyncState } from "./sync-game";
@@ -76,7 +79,9 @@ export const getCloudSaveV2FileDetails = async (
   objectId: string,
   shop: GameShop
 ): Promise<CloudSaveV2FileDetails> => {
-  assertCloudSaveSubscription();
+  await assertCloudSaveRemoteAccess(
+    await resolveCloudSaveProvider(objectId, shop)
+  );
 
   const analysis = await analyzeCloudSaveState(objectId, shop);
   const customPathContext = cloudSaveCustomPathContextFromPathContext(

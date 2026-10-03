@@ -11,6 +11,9 @@ export const canAccessCloudSaves = (
   hasActiveSubscription: boolean
 ) => getCloudSaveAccessAction(isLoggedIn, hasActiveSubscription) === "open";
 
+export const canAccessCloudSavesNow = () =>
+  canAccessCloudSaves(HydraApi.isLoggedIn(), HydraApi.hasActiveSubscription());
+
 export const assertCloudSaveSubscription = (
   isLoggedIn = HydraApi.isLoggedIn(),
   hasActiveSubscription = HydraApi.hasActiveSubscription()
