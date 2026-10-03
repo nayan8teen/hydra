@@ -16,7 +16,10 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-2022, ubuntu-latest]
+        # Linux desktop builds are paused for now. Re-enable by restoring
+        # ubuntu-latest here and the two Linux steps at the end of this job.
+        # os: [windows-2022, ubuntu-latest]
+        os: [windows-2022]
 
     runs-on: ${{ matrix.os }}
 
@@ -64,9 +67,10 @@ jobs:
           restore-keys: |
             ${{ steps.native-cache.outputs.prefix }}-
 
-      - name: Install Linux native build prerequisites
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build pkg-config curl zip unzip tar autoconf automake libtool
+      # Linux desktop builds are paused for now. Restore this step to re-enable:
+      # - name: Install Linux native build prerequisites
+      #   if: runner.os == 'Linux'
+      #   run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build pkg-config curl zip unzip tar autoconf automake libtool
 
       - name: Install dependencies
         run: yarn --frozen-lockfile
@@ -79,23 +83,24 @@ jobs:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
           key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
 
-      - name: Build Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          yarn build:linux
-        env:
-          MAIN_VITE_API_URL: ${{ vars.MAIN_VITE_API_URL }}
-          MAIN_VITE_AUTH_URL: ${{ vars.MAIN_VITE_AUTH_URL }}
-          MAIN_VITE_CHECKOUT_URL: ${{ vars.MAIN_VITE_CHECKOUT_URL }}
-          MAIN_VITE_NIMBUS_API_URL: ${{ vars.MAIN_VITE_NIMBUS_API_URL }}
-          RENDERER_VITE_EXTERNAL_RESOURCES_URL: ${{ vars.EXTERNAL_RESOURCES_URL }}
-          MAIN_VITE_EXTERNAL_RESOURCES_URL: ${{ vars.EXTERNAL_RESOURCES_URL }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          RENDERER_VITE_SENTRY_DSN: ${{ vars.SENTRY_DSN }}
-          RENDERER_VITE_REAL_DEBRID_REFERRAL_ID: ${{ vars.RENDERER_VITE_REAL_DEBRID_REFERRAL_ID }}
-          RENDERER_VITE_TORBOX_REFERRAL_CODE: ${{ vars.RENDERER_VITE_TORBOX_REFERRAL_CODE }}
-          MAIN_VITE_LAUNCHER_SUBDOMAIN: ${{ vars.MAIN_VITE_LAUNCHER_SUBDOMAIN }}
+      # Linux desktop builds are paused for now. Restore this step to re-enable:
+      # - name: Build Linux
+      #   if: matrix.os == 'ubuntu-latest'
+      #   run: |
+      #     yarn build:linux
+      #   env:
+      #     MAIN_VITE_API_URL: ${{ vars.MAIN_VITE_API_URL }}
+      #     MAIN_VITE_AUTH_URL: ${{ vars.MAIN_VITE_AUTH_URL }}
+      #     MAIN_VITE_CHECKOUT_URL: ${{ vars.MAIN_VITE_CHECKOUT_URL }}
+      #     MAIN_VITE_NIMBUS_API_URL: ${{ vars.MAIN_VITE_NIMBUS_API_URL }}
+      #     RENDERER_VITE_EXTERNAL_RESOURCES_URL: ${{ vars.EXTERNAL_RESOURCES_URL }}
+      #     MAIN_VITE_EXTERNAL_RESOURCES_URL: ${{ vars.EXTERNAL_RESOURCES_URL }}
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      #     RENDERER_VITE_SENTRY_DSN: ${{ vars.SENTRY_DSN }}
+      #     RENDERER_VITE_REAL_DEBRID_REFERRAL_ID: ${{ vars.RENDERER_VITE_REAL_DEBRID_REFERRAL_ID }}
+      #     RENDERER_VITE_TORBOX_REFERRAL_CODE: ${{ vars.RENDERER_VITE_TORBOX_REFERRAL_CODE }}
+      #     MAIN_VITE_LAUNCHER_SUBDOMAIN: ${{ vars.MAIN_VITE_LAUNCHER_SUBDOMAIN }}
 
       - name: Build Windows
         if: matrix.os == 'windows-2022'
@@ -119,14 +124,16 @@ jobs:
         with:
           name: Build-${{ matrix.os }}
           retention-days: ${{ env.RELEASE_ARTIFACT_RETENTION_DAYS }}
+          # Non-Windows artifacts are paused for now. Restore to re-enable:
+          #   dist/*.zip
+          #   dist/*.dmg
+          #   dist/*.deb
+          #   dist/*.rpm
+          #   dist/*.tar.gz
           path: |
             dist/win-unpacked/**
+            dist/*-setup.exe
             dist/*-portable.exe
-            dist/*.zip
-            dist/*.dmg
-            dist/*.deb
-            dist/*.rpm
-            dist/*.tar.gz
             dist/*.yml
             dist/*.blockmap
 
@@ -148,15 +155,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          # Non-Windows installers are paused for now. Restore to re-enable:
+          #   dist/*.zip
+          #   dist/*.dmg
+          #   dist/*.AppImage
+          #   dist/*.snap
+          #   dist/*.deb
+          #   dist/*.rpm
+          #   dist/*.tar.gz
           files: |
             dist/*.exe
-            dist/*.zip
-            dist/*.dmg
-            dist/*.AppImage
-            dist/*.snap
-            dist/*.deb
-            dist/*.rpm
-            dist/*.tar.gz
             dist/*.yml
             dist/*.blockmap
         env:
