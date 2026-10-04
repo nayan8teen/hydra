@@ -273,12 +273,12 @@ const presentation = (
 describe("cloud save presentation", () => {
   it("uses the neutral cloud label when access or setup is unavailable", () => {
     assert.deepEqual(presentation({ canUseCloudSaves: false }), {
-      labelKey: "cloud_save",
+      labelKey: "cloud_save_google_drive",
       icon: "cloud-slash",
       tone: "neutral",
     });
     assert.deepEqual(presentation({ hasExecutablePath: false }), {
-      labelKey: "cloud_save",
+      labelKey: "cloud_save_google_drive",
       icon: "cloud-slash",
       tone: "neutral",
     });
@@ -348,7 +348,7 @@ describe("cloud save presentation", () => {
       tone: "conflict",
     });
     assert.deepEqual(presentation({ state: "untracked" }), {
-      labelKey: "cloud_save",
+      labelKey: "cloud_save_google_drive",
       icon: "cloud",
       tone: "neutral",
     });

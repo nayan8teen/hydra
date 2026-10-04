@@ -1,10 +1,10 @@
-export type CloudSaveAccessAction = "sign-in" | "paywall" | "open";
+/**
+ * Fork: cloud saves are backed by the user's own Google Drive, so access
+ * depends on a connected Drive account rather than a Hydra Cloud
+ * subscription. There is no paywall state any more.
+ */
+export type CloudSaveAccessAction = "connect-drive" | "open";
 
 export const getCloudSaveAccessAction = (
-  isAuthenticated: boolean,
-  hasActiveSubscription: boolean
-): CloudSaveAccessAction => {
-  if (!isAuthenticated) return "sign-in";
-  if (!hasActiveSubscription) return "paywall";
-  return "open";
-};
+  driveConnected: boolean
+): CloudSaveAccessAction => (driveConnected ? "open" : "connect-drive");

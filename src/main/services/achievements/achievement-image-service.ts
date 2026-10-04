@@ -27,7 +27,7 @@ export class AchievementImageService {
           remoteGameId,
           clientId,
         },
-        { needsSubscription: false }
+        {}
       );
 
     return { authorization, image };
@@ -50,7 +50,7 @@ export class AchievementImageService {
       await HydraApi.post<AchievementImagePresignedUrl>(
         "/presigned-urls/achievement-image",
         { imageExt, imageLength: image.byteLength },
-        { needsSubscription: true }
+        { needsAuth: true }
       );
 
     await axios.put(presignedUrl, image, {

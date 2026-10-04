@@ -16,7 +16,7 @@ import {
 } from "@primer/octicons-react";
 import { Button, ImageCropModal } from "@renderer/components";
 import { useToast, useAppSelector, useUserDetails } from "@renderer/hooks";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import { useOpenGoogleDriveSettings } from "@renderer/hooks/use-google-drive-connection";
 import type {
   Game,
   GameArtworkSelection,
@@ -199,7 +199,7 @@ export function GameAssetsSettings({
   const { t: tProfile } = useTranslation("user_profile");
   const { showSuccessToast, showErrorToast } = useToast();
   const { hasActiveSubscription } = useUserDetails();
-  const { showHydraCloudModal } = useSubscription();
+  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
   const navigate = useNavigate();
   const classicsUseHeroLayout =
     useAppSelector(
@@ -1234,7 +1234,7 @@ export function GameAssetsSettings({
           <button
             type="button"
             className="subscription-required-button"
-            onClick={() => showHydraCloudModal("customization")}
+            onClick={() => openGoogleDriveSettings()}
           >
             <AlertIcon size={14} />
             <span>{t("custom_assets_not_sync")}</span>

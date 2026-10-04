@@ -4,7 +4,6 @@ import type {
   GameShop,
   SteamAchievement,
   UnlockedAchievement,
-  UpdatedUnlockedAchievements,
   User,
   UserPreferences,
 } from "@types";
@@ -17,7 +16,6 @@ import { publishNewAchievementNotification } from "../notifications";
 import { achievementsLogger } from "../logger";
 import { db, levelKeys } from "@main/level";
 import { getGameAchievementData } from "./get-game-achievement-data";
-import { mergeUnlockedAchievementLists } from "./merge-unlocked-achievements";
 import { AchievementWatcherManager } from "./achievement-watcher-manager";
 import { AchievementMemoryStore } from "./achievement-memory-store";
 import { achievementNotificationPresenter } from "../achievement-notification-presenter-electron";
@@ -28,9 +26,9 @@ import { groupedSouvenirWorker } from "./grouped-souvenir-worker";
 import { launchedGamePids } from "../launched-game-pids";
 import { Wine } from "../wine";
 import {
-  getGroupedSouvenirErrorCode,
-  SOUVENIR_LIMIT_ERROR_CODE,
-} from "./grouped-souvenir-retry-policy";
+  GoogleDriveService,
+  syncGoogleDriveUnlockedAchievements,
+} from "../google-drive";
 
 const isRareAchievement = (points: number) => {
   const rawPercentage = (50 - Math.sqrt(points)) * 2;
@@ -267,22 +265,6 @@ const publishAchievementUnlockNotifications = ({
   }
 };
 
-const getAchievementsForSouvenirLimitRetry = (
-  error: unknown,
-  achievements: UnlockedAchievement[]
-) => {
-  if (
-    getGroupedSouvenirErrorCode(error) !== SOUVENIR_LIMIT_ERROR_CODE ||
-    !achievements.some((achievement) => achievement.imageKey)
-  ) {
-    throw error;
-  }
-
-  return achievements.map(
-    ({ imageKey: _imageKey, ...achievement }) => achievement
-  );
-};
-
 export const mergeAchievements = async (
   game: Game,
   achievements: UnlockedAchievement[],
@@ -360,41 +342,19 @@ export const mergeAchievements = async (
 
   const achievementsToSync = mergedLocalAchievements;
 
-  const shouldSyncWithRemote =
-    Boolean(game.remoteId) && AchievementWatcherManager.hasFinishedPreSearch;
+  // Fork: unlocked achievements replicate through the user's Google Drive
+  // instead of the Hydra Cloud profile endpoint.
+  const shouldSyncWithDrive =
+    (await GoogleDriveService.isSyncEnabled()) &&
+    AchievementWatcherManager.hasFinishedPreSearch;
 
-  if (shouldSyncWithRemote) {
-    let syncedAchievements = achievementsToSync;
-
+  if (shouldSyncWithDrive) {
     try {
-      let response: UpdatedUnlockedAchievements | undefined;
-
-      try {
-        response = await HydraApi.put<UpdatedUnlockedAchievements | undefined>(
-          "/profile/games/achievements",
-          {
-            id: game.remoteId,
-            achievements: syncedAchievements,
-          }
-        );
-      } catch (error) {
-        syncedAchievements = getAchievementsForSouvenirLimitRetry(
-          error,
-          syncedAchievements
-        );
-        achievementsLogger.warn(
-          "Souvenir limit reached, synchronizing achievements without souvenirs",
-          game.objectId,
-          game.title
-        );
-        response = await HydraApi.put<UpdatedUnlockedAchievements | undefined>(
-          "/profile/games/achievements",
-          {
-            id: game.remoteId,
-            achievements: syncedAchievements,
-          }
-        );
-      }
+      const syncedAchievements = await syncGoogleDriveUnlockedAchievements(
+        game.shop,
+        game.objectId,
+        achievementsToSync
+      );
 
       AchievementWatcherManager.alreadySyncedGames.set(gameKey, true);
       await PendingAchievementSouvenirStore.clearSynced(
@@ -402,28 +362,16 @@ export const mergeAchievements = async (
         achievementsToSync
       );
 
-      if (response) {
-        await saveAchievementsInMemory(
-          response.objectId,
-          response.shop,
-          mergeUnlockedAchievementLists(
-            response.achievements,
-            syncedAchievements
-          ),
-          publishNotification
-        );
-      } else {
-        await saveAchievementsInMemory(
-          game.objectId,
-          game.shop,
-          syncedAchievements,
-          publishNotification
-        );
-      }
+      await saveAchievementsInMemory(
+        game.objectId,
+        game.shop,
+        syncedAchievements,
+        publishNotification
+      );
     } catch (error) {
       AchievementWatcherManager.alreadySyncedGames.delete(gameKey);
       achievementsLogger.error(
-        "Failed to reconcile achievements with API",
+        "Failed to reconcile achievements with Google Drive",
         game.objectId,
         game.title,
         error
@@ -432,7 +380,7 @@ export const mergeAchievements = async (
       await saveAchievementsInMemory(
         game.objectId,
         game.shop,
-        syncedAchievements,
+        achievementsToSync,
         publishNotification
       );
     }

@@ -1,6 +1,6 @@
 import { launchGame } from "@main/helpers/launch-game";
 import {
-  assertCloudSaveSubscription,
+  assertCloudSaveDriveConnected,
   confirmPendingCloudSaveCustomPathApproval,
   getPendingCloudSaveCustomPathApproval,
 } from "@main/services/cloud-save";
@@ -14,7 +14,7 @@ registerEvent(
     _event: Electron.IpcMainInvokeEvent,
     approvalId: string
   ): Promise<ConfirmCloudSaveCustomPathApprovalResult> => {
-    assertCloudSaveSubscription();
+    await assertCloudSaveDriveConnected();
     const launchOptions =
       await confirmPendingCloudSaveCustomPathApproval(approvalId);
 

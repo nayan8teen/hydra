@@ -46,7 +46,7 @@ import {
   type SouvenirGrouping,
 } from "@renderer/helpers";
 import HydraIcon from "@renderer/assets/icons/hydra.svg?react";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import { useOpenGoogleDriveSettings } from "@renderer/hooks/use-google-drive-connection";
 import { LockedProfile } from "./locked-profile";
 import { SouvenirSyncCleanupModal } from "./souvenir-sync-cleanup-modal";
 import "./profile-content.scss";
@@ -381,7 +381,7 @@ function SouvenirsEmptyState({
 }: Readonly<SouvenirsEmptyStateProps>) {
   const { t } = useTranslation("user_profile");
   const { t: tHydraCloud } = useTranslation("hydra_cloud");
-  const { showHydraCloudModal } = useSubscription();
+  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
 
   if (isLoading) {
     return (
@@ -419,7 +419,7 @@ function SouvenirsEmptyState({
         <Button
           theme="outline"
           className="profile-content__souvenirs-empty-action"
-          onClick={() => showHydraCloudModal("achievements")}
+          onClick={() => openGoogleDriveSettings()}
         >
           <HydraIcon className="profile-content__souvenirs-empty-hydra-icon" />
           <span>{tHydraCloud("learn_more")}</span>

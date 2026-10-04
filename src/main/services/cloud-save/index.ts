@@ -32,5 +32,4 @@ export * from "./should-skip-restore-file";
 export * from "./sync-game-cloud-save";
 export * from "./untrack-cloud-save-custom-path";
 export * from "./sync-anchor";
-export * from "./upload-local-game-snapshot";
 export * from "./verify-downloaded-restore-file";

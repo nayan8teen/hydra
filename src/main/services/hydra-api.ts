@@ -4,7 +4,7 @@ import url from "url";
 import { uploadGamesBatch } from "./library-sync";
 import { clearGamesRemoteIds } from "./library-sync/clear-games-remote-id";
 import { networkLogger as logger } from "./logger";
-import { UserNotLoggedInError, SubscriptionRequiredError } from "@shared";
+import { UserNotLoggedInError } from "@shared";
 import { appVersion } from "@main/constants";
 import { getUserData } from "./user/get-user-data";
 import { db } from "@main/level";
@@ -24,7 +24,6 @@ declare module "axios" {
 
 export interface HydraApiOptions {
   needsAuth?: boolean;
-  needsSubscription?: boolean;
   ifModifiedSince?: Date;
   ifNoneMatch?: string;
   validateStatus?: (status: number) => boolean;
@@ -404,30 +403,10 @@ export class HydraApi {
 
   private static async validateOptions(options?: HydraApiOptions) {
     const needsAuth = options?.needsAuth == undefined || options.needsAuth;
-    const needsSubscription = options?.needsSubscription === true;
 
     if (needsAuth) {
       if (!this.isLoggedIn()) throw new UserNotLoggedInError();
       await this.revalidateAccessTokenIfExpired();
-    }
-
-    if (needsSubscription && !this.hasActiveSubscription()) {
-      await this.refreshUserSubscription();
-
-      if (!this.hasActiveSubscription()) {
-        throw new SubscriptionRequiredError();
-      }
-    }
-  }
-
-  private static async refreshUserSubscription() {
-    if (!this.isLoggedIn()) return;
-
-    try {
-      const userDetails = await getUserData();
-      if (userDetails) this.updateUserSubscription(userDetails.subscription);
-    } catch (err) {
-      logger.error("Failed to refresh subscription state", err);
     }
   }
 

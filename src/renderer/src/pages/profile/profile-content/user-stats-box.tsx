@@ -4,13 +4,13 @@ import { useTranslation } from "react-i18next";
 import { useFormat, useUserDetails } from "@renderer/hooks";
 import { MAX_MINUTES_TO_SHOW_IN_PLAYTIME } from "@renderer/constants";
 import HydraIcon from "@renderer/assets/icons/hydra.svg?react";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import { useOpenGoogleDriveSettings } from "@renderer/hooks/use-google-drive-connection";
 import { ClockIcon, TrophyIcon } from "@primer/octicons-react";
 import { Award } from "lucide-react";
 import "./user-stats-box.scss";
 
 export function UserStatsBox() {
-  const { showHydraCloudModal } = useSubscription();
+  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
   const { userStats, isMe, userProfile } = useContext(userProfileContext);
   const { userDetails } = useUserDetails();
   const { t } = useTranslation("user_profile");
@@ -56,7 +56,7 @@ export function UserStatsBox() {
             ) : (
               <button
                 type="button"
-                onClick={() => showHydraCloudModal("achievements")}
+                onClick={() => openGoogleDriveSettings()}
                 className="user-stats__link"
               >
                 <small className="user-stats__link--warning">
@@ -88,7 +88,7 @@ export function UserStatsBox() {
             ) : (
               <button
                 type="button"
-                onClick={() => showHydraCloudModal("achievements-points")}
+                onClick={() => openGoogleDriveSettings()}
                 className="user-stats__link"
               >
                 <small className="user-stats__link--warning">

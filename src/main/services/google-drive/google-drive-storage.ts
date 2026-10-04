@@ -12,6 +12,7 @@ import { googleDriveClient } from "./google-drive-client-instance.js";
 import {
   GOOGLE_DRIVE_BLOBS_FOLDER_NAME,
   GOOGLE_DRIVE_FOLDER_MIME_TYPE,
+  GOOGLE_DRIVE_FOLDER_NAME,
   GOOGLE_DRIVE_GAME_KEY_PROPERTY,
   GOOGLE_DRIVE_GAMES_FOLDER_NAME,
   GOOGLE_DRIVE_MANIFEST_FILE_NAME,
@@ -40,7 +41,6 @@ import {
   escapeGoogleDriveQueryValue,
   parseGoogleDriveManifestHistoryVersion,
 } from "./google-drive-protocol.js";
-import { getGoogleDriveSettings } from "./google-drive-settings.js";
 
 export interface WriteGoogleDriveManifestInput
   extends Omit<BuildGoogleDriveManifestInput, "shop" | "objectId"> {
@@ -87,9 +87,8 @@ export class GoogleDriveStorage {
   static async ensureRootFolder(): Promise<GoogleDriveFolderRef> {
     if (this.rootFolder) return this.rootFolder;
 
-    const settings = await getGoogleDriveSettings();
     const existing = await this.findFolder({
-      name: settings.folderName,
+      name: GOOGLE_DRIVE_FOLDER_NAME,
       parentId: GOOGLE_DRIVE_ROOT_PARENT_ID,
       property: { key: GOOGLE_DRIVE_ROLE_PROPERTY, value: "root" },
     });
@@ -99,7 +98,7 @@ export class GoogleDriveStorage {
     }
 
     const created = await googleDriveClient.createFolder({
-      name: settings.folderName,
+      name: GOOGLE_DRIVE_FOLDER_NAME,
       parentId: GOOGLE_DRIVE_ROOT_PARENT_ID,
       appProperties: { [GOOGLE_DRIVE_ROLE_PROPERTY]: "root" },
     });
@@ -108,9 +107,8 @@ export class GoogleDriveStorage {
   }
 
   static async getRootFolder(): Promise<GoogleDriveFolderRef | null> {
-    const settings = await getGoogleDriveSettings();
     const existing = await this.findFolder({
-      name: settings.folderName,
+      name: GOOGLE_DRIVE_FOLDER_NAME,
       parentId: GOOGLE_DRIVE_ROOT_PARENT_ID,
       property: { key: GOOGLE_DRIVE_ROLE_PROPERTY, value: "root" },
     });
@@ -383,9 +381,8 @@ export class GoogleDriveStorage {
 
   /** Removes the whole sync folder; used by disconnect with data deletion. */
   static async deleteAllData() {
-    const settings = await getGoogleDriveSettings();
     const folder = await this.findFolder({
-      name: settings.folderName,
+      name: GOOGLE_DRIVE_FOLDER_NAME,
       parentId: GOOGLE_DRIVE_ROOT_PARENT_ID,
       property: { key: GOOGLE_DRIVE_ROLE_PROPERTY, value: "root" },
     });

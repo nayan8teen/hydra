@@ -10,7 +10,7 @@ import {
 } from "@renderer/components";
 import { settingsContext } from "@renderer/context";
 import { useAppSelector, useUserDetails } from "@renderer/hooks";
-import { useSubscription } from "@renderer/hooks/use-subscription";
+import { useOpenGoogleDriveSettings } from "@renderer/hooks/use-google-drive-connection";
 import { FileDirectoryIcon, HistoryIcon } from "@primer/octicons-react";
 import { useLocation } from "react-router-dom";
 import { isAchievementSouvenirsEnabled } from "@shared";
@@ -46,7 +46,7 @@ export function SettingsContextContentGameplay() {
   const { t } = useTranslation("settings");
   const { updateUserPreferences } = useContext(settingsContext);
   const { hasActiveSubscription } = useUserDetails();
-  const { showHydraCloudModal } = useSubscription();
+  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
   const { hash } = useLocation();
 
   const userPreferences = useAppSelector(
@@ -226,7 +226,7 @@ export function SettingsContextContentGameplay() {
           <button
             type="button"
             className="settings-behavior__hydra-cloud-row"
-            onClick={() => showHydraCloudModal("achievements")}
+            onClick={() => openGoogleDriveSettings()}
           >
             <CheckboxField
               id="achievement-souvenirs"

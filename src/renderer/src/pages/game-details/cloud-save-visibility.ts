@@ -17,12 +17,12 @@ export interface CloudSaveVisibility {
 
 export const isLegacyCloudSaveSettingsAvailable = (
   settings: CloudSaveSettingsVisibility,
-  hasActiveSubscription: boolean,
+  driveConnected: boolean,
   artifactCount: number
 ): boolean =>
   settings.showLegacy &&
   (settings.legacyPurpose === "active" ||
-    (hasActiveSubscription && artifactCount > 0));
+    (driveConnected && artifactCount > 0));
 
 export const getCloudSaveVisibility = (
   shop: GameShop,

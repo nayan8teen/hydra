@@ -45,7 +45,6 @@ export function SettingsGoogleDrive() {
     useState<GoogleDriveConnectFailure | null>(null);
   const [clientIdDraft, setClientIdDraft] = useState("");
   const [clientSecretDraft, setClientSecretDraft] = useState("");
-  const [folderDraft, setFolderDraft] = useState("");
   const [sweepIntervalDraft, setSweepIntervalDraft] = useState("");
   const [avatarError, setAvatarError] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
@@ -98,7 +97,6 @@ export function SettingsGoogleDrive() {
         didInitializeDrafts.current = true;
         setClientIdDraft(next.settings.clientId ?? "");
         setClientSecretDraft(next.settings.clientSecret ?? "");
-        setFolderDraft(next.settings.folderName);
         setSweepIntervalDraft(
           String(next.settings.backgroundSweepIntervalMinutes)
         );
@@ -231,17 +229,6 @@ export function SettingsGoogleDrive() {
     }
   };
 
-  const handleFolderBlur = async () => {
-    if (!status || folderDraft === status.settings.folderName) return;
-
-    try {
-      await saveSettings({ folderName: folderDraft });
-    } catch (error) {
-      logger.error(error);
-      showErrorToast(t("google_drive_settings_error"));
-    }
-  };
-
   const handleSweepToggle = async (enabled: boolean) => {
     try {
       await saveSettings({ backgroundSweepEnabled: enabled });
@@ -363,15 +350,6 @@ export function SettingsGoogleDrive() {
                   status?.settings.driveSyncEnabled !== true
                 )
               }
-            />
-
-            <TextField
-              label={t("google_drive_folder_label")}
-              hint={t("google_drive_folder_hint")}
-              value={folderDraft}
-              disabled={isSaving || isDisconnecting}
-              onChange={(event) => setFolderDraft(event.target.value)}
-              onBlur={() => void handleFolderBlur()}
             />
 
             <CheckboxField

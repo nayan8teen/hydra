@@ -1,57 +1,55 @@
 import type {
   GameShop,
   UnlockedAchievement,
-  User,
   UserAchievement,
   UserPreferences,
 } from "@types";
 import { db, levelKeys } from "@main/level";
-import { HydraApi } from "@main/services/hydra-api";
+import {
+  GoogleDriveService,
+  readGoogleDriveUnlockedAchievements,
+} from "@main/services/google-drive";
 import { achievementsLogger } from "@main/services/logger";
 import { AchievementSouvenirStore } from "./achievement-souvenir-store";
 
+interface RemoteUserGameAchievements {
+  souvenirs: Map<string, string>;
+  unlocked: UnlockedAchievement[];
+  achievements: UserAchievement[];
+}
+
+const emptyRemoteUserGameAchievements = (): RemoteUserGameAchievements => ({
+  souvenirs: new Map<string, string>(),
+  unlocked: [],
+  achievements: [],
+});
+
+/**
+ * Fork: the user's unlocked achievements live in their own Google Drive.
+ * Souvenir image keys are carried on the achievement entries; the matching
+ * image URLs are resolved separately (see the grouped souvenir worker).
+ */
 export const fetchRemoteUserGameAchievements = async (
   objectId: string,
   shop: GameShop,
-  language: string
-) => {
-  const empty = {
-    souvenirs: new Map<string, string>(),
-    unlocked: [] as UnlockedAchievement[],
-    achievements: [] as UserAchievement[],
-  };
+  _language?: string
+): Promise<RemoteUserGameAchievements> => {
+  try {
+    if (!(await GoogleDriveService.isSyncEnabled())) {
+      return emptyRemoteUserGameAchievements();
+    }
 
-  const user = await db.get<string, User>(levelKeys.user, {
-    valueEncoding: "json",
-  });
+    const unlocks = await readGoogleDriveUnlockedAchievements(shop, objectId);
+    return { ...emptyRemoteUserGameAchievements(), unlocked: unlocks };
+  } catch (error) {
+    achievementsLogger.error(
+      "Failed to read unlocked achievements from Google Drive",
+      objectId,
+      error
+    );
 
-  if (!user?.id) return empty;
-
-  const remoteAchievements = await HydraApi.get<UserAchievement[]>(
-    `/users/${user.id}/games/achievements`,
-    { shop, objectId, language }
-  );
-
-  return {
-    souvenirs: new Map(
-      remoteAchievements
-        .filter((achievement) => achievement.imageUrl)
-        .map((achievement) => [
-          achievement.name.toUpperCase(),
-          achievement.imageUrl!,
-        ])
-    ),
-    unlocked: remoteAchievements.flatMap((achievement) => {
-      if (!achievement.name || !achievement.unlockTime) return [];
-      return [
-        {
-          name: achievement.name,
-          unlockTime: achievement.unlockTime,
-        },
-      ];
-    }),
-    achievements: remoteAchievements,
-  };
+    return emptyRemoteUserGameAchievements();
+  }
 };
 
 const fetchAchievementSouvenirs = async (

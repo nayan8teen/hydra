@@ -8,9 +8,7 @@ import { safeStorage } from "electron";
 
 import { logger } from "../logger.js";
 import {
-  GOOGLE_DRIVE_DEFAULT_FOLDER_NAME,
   GOOGLE_DRIVE_DEFAULT_SWEEP_INTERVAL_MINUTES,
-  GOOGLE_DRIVE_MAX_FOLDER_NAME_LENGTH,
   GOOGLE_DRIVE_MAX_SWEEP_INTERVAL_MINUTES,
   GOOGLE_DRIVE_MIN_SWEEP_INTERVAL_MINUTES,
 } from "./google-drive-constants.js";
@@ -21,7 +19,6 @@ export const DEFAULT_GOOGLE_DRIVE_SETTINGS: GoogleDriveSettings = {
   driveSyncEnabled: false,
   backgroundSweepEnabled: false,
   backgroundSweepIntervalMinutes: GOOGLE_DRIVE_DEFAULT_SWEEP_INTERVAL_MINUTES,
-  folderName: GOOGLE_DRIVE_DEFAULT_FOLDER_NAME,
 };
 
 export { isValidGoogleDriveClientId };
@@ -36,17 +33,6 @@ export const normalizeGoogleDriveClientSecret = (
 ): string | null => {
   if (!isValidGoogleDriveClientSecret(value)) return null;
   return value.trim();
-};
-
-const normalizeFolderName = (value: unknown) => {
-  if (typeof value !== "string") return GOOGLE_DRIVE_DEFAULT_FOLDER_NAME;
-  const name = value
-    .replace(/[\\/:*?"<>|]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, GOOGLE_DRIVE_MAX_FOLDER_NAME_LENGTH)
-    .trim();
-  return name.length > 0 ? name : GOOGLE_DRIVE_DEFAULT_FOLDER_NAME;
 };
 
 const normalizeSweepInterval = (value: unknown) => {
@@ -69,7 +55,6 @@ export const normalizeGoogleDriveSettings = (
   backgroundSweepIntervalMinutes: normalizeSweepInterval(
     value?.backgroundSweepIntervalMinutes
   ),
-  folderName: normalizeFolderName(value?.folderName),
 });
 
 export const getGoogleDriveSettings =

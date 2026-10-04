@@ -3,41 +3,30 @@ import type { CloudSaveRemoteProvider, GameShop } from "@types";
 
 import { gamesSublevel, levelKeys } from "@main/level";
 import {
-  getGoogleDriveSettings,
   GoogleDriveAuth,
   GoogleDriveNotConnectedError,
+  GoogleDriveService,
 } from "../google-drive";
-import {
-  assertCloudSaveSubscription,
-  canAccessCloudSavesNow,
-} from "./cloud-save-access.js";
-import {
-  getCloudSaveAnchorIdentity,
-  getCloudSaveProviderForSnapshot,
-  normalizeCloudSaveProvider,
-  shouldUseGoogleDriveCloudSave,
-} from "./cloud-save-provider-policy.js";
+import { getCloudSaveAnchorIdentity } from "./cloud-save-provider-policy.js";
 
 export type { CloudSaveRemoteProvider };
-export { getCloudSaveProviderForSnapshot, normalizeCloudSaveProvider };
+export {
+  getCloudSaveProviderForSnapshot,
+  normalizeCloudSaveProvider,
+} from "./cloud-save-provider-policy.js";
 
 /**
- * Google Drive is the active remote only while the user enabled Drive sync and
- * an account is connected; anything else keeps using Hydra unchanged.
+ * Fork: Google Drive is the only cloud-save remote. "Enabled" means the user
+ * turned Drive sync on *and* an account is connected.
  */
-export const isGoogleDriveCloudSaveEnabled = async () => {
-  const [settings, driveConnected] = await Promise.all([
-    getGoogleDriveSettings(),
-    GoogleDriveAuth.isConnected(),
-  ]);
+export const isGoogleDriveCloudSaveEnabled = () =>
+  GoogleDriveService.isSyncEnabled();
 
-  return shouldUseGoogleDriveCloudSave({
-    driveSyncEnabled: settings.driveSyncEnabled,
-    driveConnected,
-  });
-};
-
-/** Resolves which remote backend owns a game's cloud saves right now. */
+/**
+ * Drive is the only backend. Games the sync engine cannot handle still fall
+ * back to the Hydra label so their snapshots stay inert rather than being
+ * read from Drive.
+ */
 export const resolveCloudSaveProvider = async (
   objectId: string,
   shop: GameShop
@@ -59,40 +48,25 @@ export const resolveCloudSaveProvider = async (
 export const assertCloudSaveRemoteAccess = async (
   provider?: CloudSaveRemoteProvider | null
 ) => {
-  if (normalizeCloudSaveProvider(provider) !== "google-drive") {
-    assertCloudSaveSubscription();
-    return;
-  }
-  if (!(await isGoogleDriveCloudSaveEnabled())) {
+  if (provider === "hydra" || !(await isGoogleDriveCloudSaveEnabled())) {
     throw new GoogleDriveNotConnectedError(
       "Google Drive save sync is not enabled or not connected"
     );
   }
 };
 
-/**
- * Automatic sync needs the same access as the manual flow: a Hydra login and
- * subscription, or simply a connected Drive account.
- */
 export const canAccessCloudSaveRemote = async (
   provider: CloudSaveRemoteProvider
-) =>
-  provider === "google-drive"
-    ? isGoogleDriveCloudSaveEnabled()
-    : canAccessCloudSavesNow();
+) => (provider === "google-drive" ? isGoogleDriveCloudSaveEnabled() : false);
 
 /**
- * Anchor identity for the active backend: the Hydra account for Hydra and the
- * Google account for Drive, so both backends' anchors coexist per game.
+ * Anchor identity for the only backend: the connected Google account, so a
+ * Drive-only user never needs a Hydra login to sync.
  */
 export const getCloudSaveAnchorIdentityForProvider = async (
   provider: CloudSaveRemoteProvider,
   hydraUserId: string
 ) => {
-  if (provider !== "google-drive") {
-    return getCloudSaveAnchorIdentity({ provider, hydraUserId });
-  }
-
   const status = await GoogleDriveAuth.getStatus();
   return getCloudSaveAnchorIdentity({
     provider,

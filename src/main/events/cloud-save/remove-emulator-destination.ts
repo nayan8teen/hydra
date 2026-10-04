@@ -1,6 +1,6 @@
 import {
   assertCloudSaveDeletionInactive,
-  assertCloudSaveSubscription,
+  assertCloudSaveDriveConnected,
   getCloudSaveGameContext,
   isCloudSaveSyncActive,
 } from "@main/services/cloud-save";
@@ -23,7 +23,7 @@ registerEvent(
     rawPath: string,
     kind: EmulatorDestinationKind
   ) => {
-    assertCloudSaveSubscription();
+    await assertCloudSaveDriveConnected();
     if (kind !== "save" && kind !== "state") {
       throw new Error("cloud_save_emulator_destination_invalid");
     }
