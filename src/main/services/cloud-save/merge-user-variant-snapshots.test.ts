@@ -641,7 +641,7 @@ describe("merge user variant snapshots", () => {
     ]);
   });
 
-  it("propagates a proven local deletion to the remote snapshot", () => {
+  it("asks before propagating a proven local deletion to the remote snapshot", () => {
     const deleted = file("deleted.sav", "a");
     const retained = file("retained.sav", "b");
     const local = context([retained]);
@@ -666,12 +666,30 @@ describe("merge user variant snapshots", () => {
       base: anchor([deleted, retained]),
     });
 
-    assert.deepEqual(result.files, [retained]);
-    assert.deepEqual(result.deleteRemoteEntryIds, [cloudSaveFileKey(deleted)]);
+    assert.deepEqual(result.files, [deleted, retained]);
+    assert.deepEqual(result.deleteRemoteEntryIds, []);
     assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(deleted), local: null, remote: deleted },
+    ]);
+
+    const keepLocal = mergeUserVariantSnapshots({
+      local,
+      remoteVariants: [variant],
+      remoteFiles: [deleted, retained],
+      base: anchor([deleted, retained]),
+      resolutions: new Map([
+        [cloudSaveFileKey(deleted), "keep-local" as const],
+      ]),
+    });
+    assert.deepEqual(keepLocal.files, [retained]);
+    assert.deepEqual(keepLocal.deleteRemoteEntryIds, [
+      cloudSaveFileKey(deleted),
+    ]);
+    assert.deepEqual(keepLocal.restoreEntryIds, []);
   });
 
-  it("deletes one empty profile without affecting another profile", () => {
+  it("asks before deleting one empty profile without affecting another profile", () => {
     const firstVariant: SnapshotVariant = {
       variantId,
       kind: "opaque-folder",
@@ -709,13 +727,16 @@ describe("merge user variant snapshots", () => {
       base: anchor([deleted, retained]),
     });
 
-    assert.deepEqual(result.files, [retained]);
-    assert.deepEqual(result.deleteRemoteEntryIds, [cloudSaveFileKey(deleted)]);
+    assert.deepEqual(result.files, [deleted, retained]);
+    assert.deepEqual(result.deleteRemoteEntryIds, []);
     assert.deepEqual(result.restoreEntryIds, []);
     assert.deepEqual(result.unresolvedRemoteEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(deleted), local: null, remote: deleted },
+    ]);
   });
 
-  it("uses complete leaf-parent coverage to delete a missing filename profile", () => {
+  it("asks before deleting a missing filename profile via complete leaf-parent coverage", () => {
     const firstVariant: SnapshotVariant = {
       variantId,
       kind: "opaque-folder",
@@ -757,9 +778,12 @@ describe("merge user variant snapshots", () => {
       base: anchor([deleted, retained]),
     });
 
-    assert.deepEqual(result.files, [retained]);
-    assert.deepEqual(result.deleteRemoteEntryIds, [cloudSaveFileKey(deleted)]);
+    assert.deepEqual(result.files, [deleted, retained]);
+    assert.deepEqual(result.deleteRemoteEntryIds, []);
     assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(deleted), local: null, remote: deleted },
+    ]);
   });
 
   it("restores the last file even when coverage could prove deletion", () => {

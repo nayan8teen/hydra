@@ -176,7 +176,7 @@ describe("emulator restore plan and deletion history", () => {
     },
   });
 
-  it("keeps a deliberate local deletion when scanning was complete", () => {
+  it("asks before propagating a complete local deletion", () => {
     const result = mergeUserVariantSnapshots({
       local: local(true),
       remoteVariants: [{ variantId, kind: "default" }],
@@ -185,7 +185,10 @@ describe("emulator restore plan and deletion history", () => {
       restorableEmulatorEntryIds: new Set([cloudSaveFileKey(battery)]),
     });
     assert.deepEqual(result.restoreEntryIds, []);
-    assert.deepEqual(result.deleteRemoteEntryIds, [cloudSaveFileKey(battery)]);
+    assert.deepEqual(result.deleteRemoteEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(battery), local: null, remote: battery },
+    ]);
   });
 
   it("restores a tracked remote file when discovery was partial", () => {
