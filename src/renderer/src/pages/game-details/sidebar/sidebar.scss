@@ -327,6 +327,10 @@
   &:hover {
     text-decoration: underline;
   }
+
+  &--enabled {
+    color: globals.$success-color;
+  }
 }
 
 .controller-support {
