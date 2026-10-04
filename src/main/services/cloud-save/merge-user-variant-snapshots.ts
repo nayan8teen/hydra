@@ -325,11 +325,20 @@ export const mergeUserVariantSnapshots = ({
       }
 
       if (sameBytes(remoteFile, baseEntry)) {
-        if (direction === "restore-only") {
+        // The remote save still matches the last synced state, but it is gone
+        // locally. That is ambiguous: it may be an intentional local deletion
+        // or an accidental loss (manual cleanup, reinstall, a reset profile).
+        // Never propagate it to the cloud implicitly, because that destroys
+        // the only remaining copy. Surface a conflict so the user chooses.
+        const resolution = resolutions?.get(entryId);
+        if (direction === "restore-only" || resolution === "keep-remote") {
           files.push(remoteFile);
           restoreEntryIds.add(entryId);
-        } else {
+        } else if (resolution === "keep-local") {
           deleteRemoteEntryIds.add(entryId);
+        } else {
+          files.push(remoteFile);
+          conflicts.push({ entryId, local: null, remote: remoteFile });
         }
         continue;
       }
