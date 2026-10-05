@@ -13,6 +13,7 @@ import type {
 import {
   GoogleDriveManifestConflictError,
   GoogleDriveStorage,
+  isGoogleDriveManifestConflictError,
 } from "../google-drive";
 import { cloudSaveFileKey } from "./cloud-save-contract";
 import {
@@ -38,6 +39,11 @@ export interface CreateGoogleDriveSnapshotParams {
   updateAnchor?: boolean;
   onProgress?: (progress: CloudSaveUploadProgress) => void;
   assertEnvironmentCurrent?: () => Promise<void>;
+  /**
+   * How many times to re-read and re-plan when the Drive head manifest
+   * changes mid-commit. The total attempt count is this + 1.
+   */
+  maxManifestConflictRetries?: number;
 }
 
 const blobKey = (file: Pick<SnapshotFile, "hash" | "sizeBytes">) =>
@@ -128,107 +134,157 @@ const uploadGoogleDriveSnapshotBlobs = async (
  * Commits a local snapshot to Drive. The head manifest is the snapshot: its
  * Drive file id is the snapshot id the rest of the engine already handles.
  */
+const readHead = async (
+  shop: GameShop,
+  objectId: string
+): Promise<{
+  fileId: string;
+  etag: string;
+  version: number;
+} | null> => {
+  const headRef = await GoogleDriveStorage.readManifest(shop, objectId);
+  if (!headRef) return null;
+  return {
+    fileId: headRef.fileId,
+    etag: headRef.etag,
+    version: headRef.manifest.version,
+  };
+};
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Commits a local snapshot to Drive with retry on concurrent manifest
+ * changes. The head manifest is the snapshot: its Drive file id is the
+ * snapshot id the rest of the engine already handles.
+ *
+ * A concurrent write (from another app instance or a re-validation) can
+ * move the head between the analysis read and the commit. Rather than
+ * fail immediately, re-read the head and re-plan a few times so a
+ * transient conflict resolves itself.
+ */
 export const createGoogleDriveSnapshotFromLocalState = async (
   params: CreateGoogleDriveSnapshotParams
 ): Promise<RemoteGameSnapshot> => {
-  const headRef = await GoogleDriveStorage.readManifest(
-    params.shop,
-    params.objectId
-  );
-  const plan = planGoogleDriveSnapshotWrite({
-    head: headRef
-      ? {
-          fileId: headRef.fileId,
-          etag: headRef.etag,
-          version: headRef.manifest.version,
+  const maxRetries = params.maxManifestConflictRetries ?? 2;
+  let head = await readHead(params.shop, params.objectId);
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const plan = planGoogleDriveSnapshotWrite({
+      head: head,
+      baseVersion: params.baseVersion,
+      expectedSnapshotId: params.expectedSnapshotId ?? null,
+    });
+    if (plan.kind !== "conflict") {
+      try {
+        await uploadGoogleDriveSnapshotBlobs(params);
+        await params.assertEnvironmentCurrent?.();
+
+        const manifestRef = await GoogleDriveStorage.writeManifest(
+          params.shop,
+          params.objectId,
+          {
+            previousManifestFileId: plan.previousManifestFileId,
+            previousEtag: plan.previousEtag,
+            version: plan.version,
+            previousSnapshotId: plan.previousSnapshotId,
+            aggregateHash: params.aggregateHash,
+            environmentId: params.context.environmentId,
+            hostname: os.hostname() || "unknown",
+            platform: params.context.pathContext.platform,
+            appVersion,
+            customPathRawPaths: params.customPathRawPaths,
+            variants: params.variants,
+            files: params.files,
+          }
+        );
+        await params.assertEnvironmentCurrent?.();
+
+        if (
+          !verifyGoogleDriveSnapshotCommit({
+            manifest: manifestRef.manifest,
+            version: plan.version,
+            aggregateHash: params.aggregateHash,
+            customPathRawPaths: params.customPathRawPaths,
+            variants: params.variants,
+            files: params.files,
+          })
+        ) {
+          throw new Error("Committed Google Drive snapshot is inconsistent");
         }
-      : null,
-    baseVersion: params.baseVersion,
-    expectedSnapshotId: params.expectedSnapshotId ?? null,
-  });
-  if (plan.kind === "conflict") {
-    throw new GoogleDriveManifestConflictError(
-      plan.reason === "snapshot-changed"
-        ? "Google Drive snapshot changed before the commit"
-        : "Google Drive snapshot version advanced before the commit"
-    );
-  }
 
-  await uploadGoogleDriveSnapshotBlobs(params);
-  await params.assertEnvironmentCurrent?.();
+        if (params.updateAnchor !== false) {
+          await params.assertEnvironmentCurrent?.();
+          await saveCloudSaveSyncAnchor(
+            params.shop,
+            params.objectId,
+            params.context.environmentId,
+            {
+              schemaVersion: 4,
+              environmentId: params.context.environmentId,
+              baseSnapshotId: manifestRef.fileId,
+              baseVersion: plan.version,
+              baseAggregateHash: params.aggregateHash,
+              entries: params.files.map((file) => ({
+                variantId: file.variantId,
+                rawPath: file.rawPath,
+                relativePath: file.relativePath,
+                hash: file.hash,
+                sizeBytes: file.sizeBytes,
+                ...(file.stateMetadata
+                  ? { stateMetadata: file.stateMetadata }
+                  : {}),
+              })),
+              unresolvedRemoteEntryIds: (
+                params.unresolvedRemoteEntryIds ?? []
+              ).filter((entryId) =>
+                params.files.some((file) => cloudSaveFileKey(file) === entryId)
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          );
+        }
 
-  const manifestRef = await GoogleDriveStorage.writeManifest(
-    params.shop,
-    params.objectId,
-    {
-      previousManifestFileId: plan.previousManifestFileId,
-      previousEtag: plan.previousEtag,
-      version: plan.version,
-      previousSnapshotId: plan.previousSnapshotId,
-      aggregateHash: params.aggregateHash,
-      environmentId: params.context.environmentId,
-      hostname: os.hostname() || "unknown",
-      platform: params.context.pathContext.platform,
-      appVersion,
-      customPathRawPaths: params.customPathRawPaths,
-      variants: params.variants,
-      files: params.files,
-    }
-  );
-  await params.assertEnvironmentCurrent?.();
-
-  if (
-    !verifyGoogleDriveSnapshotCommit({
-      manifest: manifestRef.manifest,
-      version: plan.version,
-      aggregateHash: params.aggregateHash,
-      customPathRawPaths: params.customPathRawPaths,
-      variants: params.variants,
-      files: params.files,
-    })
-  ) {
-    throw new Error("Committed Google Drive snapshot is inconsistent");
-  }
-
-  if (params.updateAnchor !== false) {
-    await params.assertEnvironmentCurrent?.();
-    await saveCloudSaveSyncAnchor(
-      params.shop,
-      params.objectId,
-      params.context.environmentId,
-      {
-        schemaVersion: 4,
-        environmentId: params.context.environmentId,
-        baseSnapshotId: manifestRef.fileId,
-        baseVersion: plan.version,
-        baseAggregateHash: params.aggregateHash,
-        entries: params.files.map((file) => ({
-          variantId: file.variantId,
-          rawPath: file.rawPath,
-          relativePath: file.relativePath,
-          hash: file.hash,
-          sizeBytes: file.sizeBytes,
-          ...(file.stateMetadata ? { stateMetadata: file.stateMetadata } : {}),
-        })),
-        unresolvedRemoteEntryIds: (
-          params.unresolvedRemoteEntryIds ?? []
-        ).filter((entryId) =>
-          params.files.some((file) => cloudSaveFileKey(file) === entryId)
-        ),
-        updatedAt: new Date().toISOString(),
+        return {
+          id: manifestRef.fileId,
+          version: plan.version,
+          fileCount: params.files.length,
+          totalSizeBytes: params.files.reduce(
+            (total, file) => total + file.sizeBytes,
+            0
+          ),
+          aggregateHash: params.aggregateHash,
+          provider: "google-drive",
+        };
+      } catch (error) {
+        if (attempt < maxRetries && isGoogleDriveManifestConflictError(error)) {
+          head = await readHead(params.shop, params.objectId);
+          continue;
+        }
+        throw error;
       }
-    );
+    }
+
+    if (attempt >= maxRetries) {
+      throw new GoogleDriveManifestConflictError(
+        plan.reason === "snapshot-changed"
+          ? "Google Drive snapshot changed before the commit"
+          : "Google Drive snapshot version advanced before the commit"
+      );
+    }
+
+    head = await readHead(params.shop, params.objectId);
+    if (!head) {
+      // Head manifest disappeared; re-plan with no head on the next
+      // iteration so a fresh first write can proceed.
+      await sleep(100 * (attempt + 1));
+      continue;
+    }
+    await sleep(100 * (attempt + 1));
   }
 
-  return {
-    id: manifestRef.fileId,
-    version: plan.version,
-    fileCount: params.files.length,
-    totalSizeBytes: params.files.reduce(
-      (total, file) => total + file.sizeBytes,
-      0
-    ),
-    aggregateHash: params.aggregateHash,
-    provider: "google-drive",
-  };
+  throw new Error(
+    "Unreachable: createGoogleDriveSnapshotFromLocalState exhausted retries"
+  );
 };
