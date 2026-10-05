@@ -50,6 +50,11 @@ const sameBytes = (
   return left.hash === right.hash && left.sizeBytes === right.sizeBytes;
 };
 
+const isStrictlyNewer = (
+  left: Pick<SnapshotFile, "lastModifiedAt">,
+  right: Pick<SnapshotFile, "lastModifiedAt">
+) => Date.parse(left.lastModifiedAt) > Date.parse(right.lastModifiedAt);
+
 const rpcs3SlotKey = (
   file: Pick<SnapshotFile, "variantId" | "rawPath" | "relativePath"> | undefined
 ) => {
@@ -334,6 +339,16 @@ export const mergeUserVariantSnapshots = ({
     const localEqualsBase = sameBytes(localFile, baseEntry);
     const remoteEqualsBase = sameBytes(remoteFile, baseEntry);
     if (baseEntry && remoteEqualsBase && !localEqualsBase) {
+      files.push(localFile);
+      continue;
+    }
+    // Without any sync base the direction cannot be derived from hashes, and a
+    // game that was just played would otherwise dead-end in a conflict even
+    // though its local save simply moved ahead. A local copy that is strictly
+    // newer than the cloud copy was written after it, so sync it up. Ties and
+    // older local copies stay conflicts (a remote-only change must be applied
+    // only on an explicit request).
+    if (!base && isStrictlyNewer(localFile, remoteFile)) {
       files.push(localFile);
       continue;
     }

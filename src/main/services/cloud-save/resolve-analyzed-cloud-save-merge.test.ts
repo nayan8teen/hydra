@@ -64,6 +64,31 @@ const context = (files: SnapshotFile[]): LocalGameSnapshotContext =>
   }) as LocalGameSnapshotContext;
 
 describe("resolved cloud save merge", () => {
+  it("treats a resolution as a no-op when the conflict is already gone", () => {
+    const merge = {
+      variants: [variant],
+      files: [],
+      conflicts: [],
+      restoreEntryIds: [],
+      deleteRemoteEntryIds: [],
+      deleteLocalEntryIds: [],
+      unresolvedRemoteEntryIds: [],
+      partial: false,
+    };
+    const analysis = {
+      merge,
+      localSnapshotContext: context([]),
+      remoteManifest: null,
+      anchor: null,
+      syncDirection: "bidirectional",
+      pendingCustomPathRawPaths: [],
+      installationOwnedCustomPathRawPaths: [],
+      preserveCloudOnlyEntryIds: [],
+    } as unknown as Parameters<typeof resolveAnalyzedCloudSaveMerge>[0];
+
+    assert.equal(resolveAnalyzedCloudSaveMerge(analysis, "keep-local"), merge);
+  });
+
   it("keeps a cloud-only Transfer Pak save while resolving another conflict", () => {
     const transferPak = file(
       "transfer-pak.sav",

@@ -137,6 +137,64 @@ describe("merge user variant snapshots", () => {
     );
   });
 
+  it("syncs a strictly newer local save when no base exists", () => {
+    const rawPath = "<home>/game";
+    const local = {
+      ...file("A.sav", "c", rawPath),
+      lastModifiedAt: "2026-07-23T10:00:00.000Z",
+    };
+    const remote = {
+      ...file("A.sav", "a", rawPath),
+      lastModifiedAt: "2026-07-22T10:00:00.000Z",
+    };
+    const result = mergeUserVariantSnapshots({
+      local: context([local]),
+      remoteVariants: [variant],
+      remoteFiles: [remote],
+      base: null,
+    });
+    assert.deepEqual(result.conflicts, []);
+    assert.deepEqual(
+      result.files.map((entry) => entry.hash),
+      [hash("c")]
+    );
+  });
+
+  it("keeps an older local save as a conflict when no base exists", () => {
+    const rawPath = "<home>/game";
+    const local = {
+      ...file("A.sav", "c", rawPath),
+      lastModifiedAt: "2026-07-21T10:00:00.000Z",
+    };
+    const remote = {
+      ...file("A.sav", "a", rawPath),
+      lastModifiedAt: "2026-07-22T10:00:00.000Z",
+    };
+    const result = mergeUserVariantSnapshots({
+      local: context([local]),
+      remoteVariants: [variant],
+      remoteFiles: [remote],
+      base: null,
+    });
+    assert.equal(result.conflicts.length, 1);
+  });
+
+  it("keeps a newer remote save as a conflict when no base exists", () => {
+    const rawPath = "<home>/game";
+    const local = file("A.sav", "c", rawPath);
+    const remote = {
+      ...file("A.sav", "a", rawPath),
+      lastModifiedAt: "2026-07-23T10:00:00.000Z",
+    };
+    const result = mergeUserVariantSnapshots({
+      local: context([local]),
+      remoteVariants: [variant],
+      remoteFiles: [remote],
+      base: null,
+    });
+    assert.equal(result.conflicts.length, 1);
+  });
+
   it("keeps RetroArch state images with the chosen state version", () => {
     const rawPath = "<emulator>/retroarch-v2/snes";
     const stateId = "1".repeat(64);
