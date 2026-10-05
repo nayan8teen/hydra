@@ -27,6 +27,17 @@ export type GoogleDriveSnapshotWritePlan =
  * Decides whether a Drive commit may proceed. A head manifest that moved since
  * the caller analyzed the game is a conflict, mirroring the Hydra engine's
  * `expectedSnapshotId`/`baseVersion` preconditions.
+ *
+ * The head manifest is the snapshot: its Drive file id is the snapshot id and
+ * it is updated in place, so the snapshot id is stable across versions and the
+ * `version` is the real ordering key. When the caller analyzed a snapshot that
+ * is newer than the head, or the head is missing entirely, that base can only
+ * be a history version (a game whose head was never created, was lost, or was
+ * reset to version 1 while history advanced). Dead-ending there means a
+ * locally-newer save could never upload, so heal the head from that base
+ * instead: carry the version past the analyzed one, so the head sorts above the
+ * history it replaces. The storage layer still refuses to clobber a head that
+ * appeared meanwhile.
  */
 export const planGoogleDriveSnapshotWrite = (params: {
   head: GoogleDriveSnapshotHead | null;
@@ -35,10 +46,21 @@ export const planGoogleDriveSnapshotWrite = (params: {
 }): GoogleDriveSnapshotWritePlan => {
   const head = params.head;
   const expectedSnapshotId = params.expectedSnapshotId ?? null;
+  const headVersion = head?.version ?? 0;
+
+  if (expectedSnapshotId !== null && headVersion < params.baseVersion) {
+    return {
+      kind: "write",
+      version: params.baseVersion + 1,
+      previousManifestFileId: head?.fileId ?? null,
+      previousEtag: head?.etag ?? null,
+      previousSnapshotId: expectedSnapshotId,
+    };
+  }
+
   if (expectedSnapshotId !== null && head?.fileId !== expectedSnapshotId) {
     return { kind: "conflict", reason: "snapshot-changed" };
   }
-  const headVersion = head?.version ?? 0;
   if (headVersion !== params.baseVersion) {
     return { kind: "conflict", reason: "version-changed" };
   }

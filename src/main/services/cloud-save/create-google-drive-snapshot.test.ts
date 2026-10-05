@@ -71,14 +71,32 @@ describe("Drive manifest conflict retry", () => {
     );
   });
 
-  it("conflicts when the head vanished between reads", () => {
+  it("recreates the head when only a history snapshot remains", () => {
+    // A game whose head manifest is missing but whose history survived (the
+    // exact condition behind "show cloud snapshots when the head manifest is
+    // missing") analyzed a history snapshot as its base. The commit must create
+    // a fresh head carrying the version past that history instead of
+    // dead-ending in a conflict that no retry can clear.
     assert.deepEqual(
       planGoogleDriveSnapshotWrite({
         head: null,
         baseVersion: 4,
-        expectedSnapshotId: "file-3",
+        expectedSnapshotId: "history-file-3",
       }),
-      { kind: "conflict", reason: "snapshot-changed" }
+      {
+        kind: "write",
+        version: 5,
+        previousManifestFileId: null,
+        previousEtag: null,
+        previousSnapshotId: "history-file-3",
+      }
+    );
+  });
+
+  it("conflicts when the head is missing and only a version was analyzed", () => {
+    assert.deepEqual(
+      planGoogleDriveSnapshotWrite({ head: null, baseVersion: 4 }),
+      { kind: "conflict", reason: "version-changed" }
     );
   });
 });
