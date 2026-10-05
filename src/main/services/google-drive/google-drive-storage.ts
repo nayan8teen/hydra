@@ -247,6 +247,50 @@ export class GoogleDriveStorage {
     const folder = await this.findGameFolder(shop, objectId);
     if (!folder) return null;
 
+    return this.readManifestInFolder(folder, shop, objectId);
+  }
+
+  /**
+   * Reads a game's head manifest and its manifest history in one game-folder
+   * lookup. Read paths must not assume a head manifest exists: a game whose
+   * head is missing can still have restorable history snapshots.
+   */
+  static async listGameManifests(
+    shop: GameShop,
+    objectId: string
+  ): Promise<{
+    head: GoogleDriveManifestRef | null;
+    history: GoogleDriveManifestRef[];
+  }> {
+    const folder = await this.findGameFolder(shop, objectId);
+    if (!folder) return { head: null, history: [] };
+
+    const [head, history] = await Promise.all([
+      this.readManifestInFolder(folder, shop, objectId),
+      this.listManifestHistoryInFolder(folder, shop, objectId),
+    ]);
+    return { head, history };
+  }
+
+  /**
+   * Reads a manifest by Drive file id, for callers that know the snapshot id
+   * but not the game folder (the restore path re-checks game ownership).
+   */
+  static async listManifestHistory(
+    shop: GameShop,
+    objectId: string
+  ): Promise<GoogleDriveManifestRef[]> {
+    const folder = await this.findGameFolder(shop, objectId);
+    if (!folder) return [];
+
+    return this.listManifestHistoryInFolder(folder, shop, objectId);
+  }
+
+  private static async readManifestInFolder(
+    folder: GoogleDriveFolderRef,
+    shop: GameShop,
+    objectId: string
+  ): Promise<GoogleDriveManifestRef | null> {
     const file = await googleDriveClient.findFile({
       query: buildGoogleDriveFileQuery({
         name: GOOGLE_DRIVE_MANIFEST_FILE_NAME,
@@ -271,17 +315,11 @@ export class GoogleDriveStorage {
     };
   }
 
-  /**
-   * Reads a manifest by Drive file id, for callers that know the snapshot id
-   * but not the game folder (the restore path re-checks game ownership).
-   */
-  static async listManifestHistory(
+  private static async listManifestHistoryInFolder(
+    folder: GoogleDriveFolderRef,
     shop: GameShop,
     objectId: string
   ): Promise<GoogleDriveManifestRef[]> {
-    const folder = await this.findGameFolder(shop, objectId);
-    if (!folder) return [];
-
     const files = await googleDriveClient.listAllFiles({
       query: buildGoogleDriveNamePrefixQuery({
         namePrefix: GOOGLE_DRIVE_MANIFEST_HISTORY_PREFIX,
