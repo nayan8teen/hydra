@@ -57,6 +57,9 @@ import type {
   RetroArchLocalBatteryCandidate,
   RetroArchLegacyBatteryCandidate,
   CloudSaveV2FileDetails,
+  CloudSaveHistorySnapshot,
+  CloudSaveSnapshotFiles,
+  CloudSaveSnapshotRestoreResult,
   GoogleDriveAccount,
   GoogleDriveConnectionStatus,
   GoogleDriveSettings,
@@ -211,6 +214,49 @@ contextBridge.exposeInMainWorld("electron", {
       objectId,
       shop
     ) as Promise<CloudSaveV2FileDetails>,
+  listCloudSaveSnapshots: (objectId: string, shop: GameShop) =>
+    ipcRenderer.invoke("listCloudSaveSnapshots", objectId, shop) as Promise<
+      CloudSaveHistorySnapshot[]
+    >,
+  getCloudSaveSnapshotFiles: (
+    objectId: string,
+    shop: GameShop,
+    snapshotId: string
+  ) =>
+    ipcRenderer.invoke(
+      "getCloudSaveSnapshotFiles",
+      objectId,
+      shop,
+      snapshotId
+    ) as Promise<CloudSaveSnapshotFiles>,
+  restoreCloudSaveSnapshot: (
+    objectId: string,
+    shop: GameShop,
+    snapshotId: string,
+    entryIds: string[],
+    onProgress?: (progress: CloudSaveSyncProgressPayload) => void
+  ) => {
+    const operationId = randomUUID();
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: CloudSaveSyncIpcProgressPayload
+    ) => {
+      if (progress.operationId === operationId) onProgress?.(progress);
+    };
+    ipcRenderer.on("on-cloud-save-sync-progress", listener);
+    return ipcRenderer
+      .invoke(
+        "restoreCloudSaveSnapshot",
+        operationId,
+        objectId,
+        shop,
+        snapshotId,
+        entryIds
+      )
+      .finally(() =>
+        ipcRenderer.removeListener("on-cloud-save-sync-progress", listener)
+      ) as Promise<CloudSaveSnapshotRestoreResult>;
+  },
   getRetroArchLocalBatteryCandidates: (objectId: string, shop: GameShop) =>
     ipcRenderer.invoke(
       "getRetroArchLocalBatteryCandidates",

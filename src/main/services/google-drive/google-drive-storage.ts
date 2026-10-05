@@ -275,6 +275,50 @@ export class GoogleDriveStorage {
    * Reads a manifest by Drive file id, for callers that know the snapshot id
    * but not the game folder (the restore path re-checks game ownership).
    */
+  static async listManifestHistory(
+    shop: GameShop,
+    objectId: string
+  ): Promise<GoogleDriveManifestRef[]> {
+    const folder = await this.findGameFolder(shop, objectId);
+    if (!folder) return [];
+
+    const files = await googleDriveClient.listAllFiles({
+      query: buildGoogleDriveNamePrefixQuery({
+        namePrefix: GOOGLE_DRIVE_MANIFEST_HISTORY_PREFIX,
+        parentId: folder.id,
+      }),
+    });
+    const history = await Promise.all(
+      files
+        .map((file) => ({
+          file,
+          version: parseGoogleDriveManifestHistoryVersion(file.name),
+        }))
+        .filter(
+          (item): item is { file: GoogleDriveFileMetadata; version: number } =>
+            item.version !== null
+        )
+        .map(async ({ file }) => {
+          const content = await googleDriveClient.downloadJson(file.id);
+          const manifest = parseGoogleDriveManifest(content);
+          if (manifest.shop !== shop || manifest.objectId !== objectId) {
+            throw new GoogleDriveManifestInvalidError(
+              "Google Drive manifest history belongs to another game"
+            );
+          }
+          return {
+            fileId: file.id,
+            etag: file.headRevisionId ?? "",
+            modifiedTime: file.modifiedTime ?? manifest.updatedAt,
+            manifest,
+          } satisfies GoogleDriveManifestRef;
+        })
+    );
+    return history.sort(
+      (left, right) => right.manifest.version - left.manifest.version
+    );
+  }
+
   static async readManifestByFileId(
     fileId: string
   ): Promise<GoogleDriveManifestRef | null> {

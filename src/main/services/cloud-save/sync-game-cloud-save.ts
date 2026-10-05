@@ -332,6 +332,7 @@ const executeRemoteSnapshotDeletionSync = async ({
         await deleteLocalSaveTargets(
           analysis.localSnapshotContext,
           deleteLocalEntryIds,
+          "keep-remote",
           assertEnvironmentCurrent
         );
       }
@@ -438,6 +439,7 @@ const executeRestoreOnlySync = async ({
     await deleteLocalSaveTargets(
       analysis.localSnapshotContext,
       deleteLocalIds,
+      "keep-remote",
       assertEnvironmentCurrent
     );
   }
@@ -607,6 +609,7 @@ const executeAppliedSync = async ({
     await deleteLocalSaveTargets(
       analysis.localSnapshotContext,
       deleteLocalIds,
+      "keep-remote",
       assertEnvironmentCurrent
     );
   }
@@ -771,10 +774,26 @@ const executeGameCloudSaveSync = async ({
       analysis.remoteManifest?.customPathRawPaths ?? []
     );
   const firstSyncState = getFirstSyncState(analysis);
+  // A conflict resolution was applied to the merge above. For a game without a
+  // sync anchor the first-sync state is computed from the aggregate hashes and
+  // always reports "conflict"; the planner must see the user's choice instead
+  // of re-reporting a conflict that could never be resolved.
+  const appliedResolution =
+    resolution &&
+    analysis.merge.conflicts.length > 0 &&
+    merge.conflicts.length === 0
+      ? resolution
+      : undefined;
+  const effectiveFirstSyncState =
+    firstSyncState === "conflict" && appliedResolution
+      ? appliedResolution === "keep-local"
+        ? "local-ahead"
+        : "remote-ahead"
+      : firstSyncState;
   const syncPlan = planCloudSaveSync({
     trigger,
     initialState,
-    firstSyncState,
+    firstSyncState: effectiveFirstSyncState,
     gameRunning: isGameRunning(objectId, shop),
     hasLocalFiles:
       analysis.localSnapshot.files.length > 0 ||
@@ -794,7 +813,7 @@ const executeGameCloudSaveSync = async ({
   }
   if (initialState === "untracked") {
     if (syncPlan.kind === "noop") {
-      if (firstSyncState === "synced") {
+      if (effectiveFirstSyncState === "synced") {
         await saveCurrentHeadAnchor(
           objectId,
           shop,
@@ -803,7 +822,7 @@ const executeGameCloudSaveSync = async ({
           assertEnvironmentCurrent
         );
       }
-      return finish("none", firstSyncState);
+      return finish("none", effectiveFirstSyncState);
     }
     const outcome = await runFirstSync(
       objectId,
@@ -812,7 +831,8 @@ const executeGameCloudSaveSync = async ({
       syncPlan.action,
       analysis,
       emitProgress,
-      assertEnvironmentCurrent
+      assertEnvironmentCurrent,
+      { merge, mergedAggregateHash: mergedAggregateHash ?? undefined }
     );
     if (outcome.result.action !== "conflict") {
       await confirmCloudSaveCustomPaths(

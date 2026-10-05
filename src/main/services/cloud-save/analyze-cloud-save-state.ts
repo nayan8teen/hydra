@@ -17,7 +17,6 @@ import {
 } from "./custom-path-store";
 import { getInstallationOwnedCustomPathRawPaths } from "./installation-owned-custom-paths";
 import {
-  isEmulatorSaveRawPath,
   parseRetroArchGameRawPath,
   parseRetroArchSaveRawPath,
 } from "./emulator-provider-identity";
@@ -279,8 +278,6 @@ export const analyzeCloudSaveState = async (
       new Set(rpcs3SavedataTitleIds)
     );
   }
-  const restorableEmulatorEntryIds = new Set<string>();
-
   if (remoteManifest) {
     const localEntryIds = new Set(
       localSnapshotContext.files.map(cloudSaveFileKey)
@@ -305,11 +302,6 @@ export const analyzeCloudSaveState = async (
           customPathBindings,
           rpcs3SavedataTitleIds
         );
-        for (const action of resolution.actions) {
-          if (isEmulatorSaveRawPath(action.rawPath)) {
-            restorableEmulatorEntryIds.add(cloudSaveFileKey(action));
-          }
-        }
         localSnapshotContext = reconcileRemoteTargetObservations(
           localSnapshotContext,
           remoteManifest.variants,
@@ -342,7 +334,6 @@ export const analyzeCloudSaveState = async (
     preserveLocalMissingRawPaths,
     preserveLocalMissingEntryIds,
     preserveCloudOnlyEntryIds,
-    restorableEmulatorEntryIds,
     treatLocalAsNewRawPaths: new Set(trackingState.pendingRawPaths),
   });
   const mergedCustomPathRawPaths = [
@@ -386,7 +377,6 @@ export const analyzeCloudSaveState = async (
     pendingCustomPathRawPaths: trackingState.pendingRawPaths,
     installationOwnedCustomPathRawPaths: [...preserveLocalMissingRawPaths],
     preserveCloudOnlyEntryIds: [...preserveCloudOnlyEntryIds],
-    restorableEmulatorEntryIds: [...restorableEmulatorEntryIds],
     localSnapshot,
     localSnapshotContext,
     environmentId,

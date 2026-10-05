@@ -96,7 +96,7 @@ describe("merge user variant snapshots", () => {
     assert.deepEqual(result.files, [remote]);
   });
 
-  it("unites five cloud states with three new notebook states", () => {
+  it("keeps cloud-only save states pending alongside new notebook states", () => {
     const rawPath = "<emulator>/retroarch-v2/snes";
     const remote = ["1", "2", "3", "4", "5"].map((value) =>
       file(`states/${value.repeat(64)}.state`, value, rawPath)
@@ -111,7 +111,11 @@ describe("merge user variant snapshots", () => {
       base: null,
     });
     assert.equal(result.files.length, 8);
-    assert.equal(result.restoreEntryIds.length, 5);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(
+      result.unresolvedRemoteEntryIds,
+      remote.map(cloudSaveFileKey).sort()
+    );
     assert.equal(result.conflicts.length, 0);
   });
 
@@ -262,10 +266,14 @@ describe("merge user variant snapshots", () => {
         ["B.sav", hash("d")],
       ]
     );
-    assert.deepEqual(result.restoreEntryIds, [
-      cloudSaveFileKey(file("B.sav", "d")),
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      {
+        entryId: cloudSaveFileKey(file("B.sav", "d")),
+        local: file("B.sav", "b"),
+        remote: file("B.sav", "d"),
+      },
     ]);
-    assert.equal(result.conflicts.length, 0);
   });
 
   it("merges an existing v1 default variant without duplicating it", () => {
@@ -305,7 +313,7 @@ describe("merge user variant snapshots", () => {
     });
 
     assert.deepEqual(result.files, [remote]);
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(remote)]);
+    assert.deepEqual(result.restoreEntryIds, []);
     assert.deepEqual(result.unresolvedRemoteEntryIds, [
       cloudSaveFileKey(remote),
     ]);
@@ -422,7 +430,11 @@ describe("merge user variant snapshots", () => {
       base: anchor(base),
     });
 
-    assert.deepEqual(result.conflicts, []);
+    assert.deepEqual(
+      result.conflicts.map((item) => item.entryId),
+      [cloudSaveFileKey(file("BLUS30443-SLOT-2/DATA.BIN", "d", rawPath))]
+    );
+    assert.deepEqual(result.restoreEntryIds, []);
     assert.deepEqual(
       result.files.map((item) => item.hash),
       [hash("c"), hash("d")]
@@ -491,7 +503,10 @@ describe("merge user variant snapshots", () => {
       result.files.map(({ rawPath }) => rawPath).sort(),
       [local.rawPath, remote.rawPath].sort()
     );
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(remote)]);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.unresolvedRemoteEntryIds, [
+      cloudSaveFileKey(remote),
+    ]);
     assert.deepEqual(result.deleteRemoteEntryIds, []);
     assert.deepEqual(result.conflicts, []);
   });
@@ -517,7 +532,7 @@ describe("merge user variant snapshots", () => {
     assert.deepEqual(result.conflicts, []);
   });
 
-  it("does not turn an unresolved remote entry into a later deletion", () => {
+  it("does not turn an unresolved remote entry into an implicit restore", () => {
     const local = file("local.sav", "l");
     const remote = file("remote.sav", "r");
     const unresolvedCoverage: UserLocationCoverage = {
@@ -552,13 +567,17 @@ describe("merge user variant snapshots", () => {
       remoteVariants: [variant],
       remoteFiles: [remote],
       base: {
-        ...anchor(first.files),
+        ...anchor([remote]),
         unresolvedRemoteEntryIds: first.unresolvedRemoteEntryIds,
       },
     });
 
     assert.deepEqual(second.deleteRemoteEntryIds, []);
-    assert.deepEqual(second.restoreEntryIds, [cloudSaveFileKey(remote)]);
+    assert.deepEqual(second.restoreEntryIds, []);
+    assert.deepEqual(second.unresolvedRemoteEntryIds, []);
+    assert.deepEqual(second.conflicts, [
+      { entryId: cloudSaveFileKey(remote), local: null, remote },
+    ]);
   });
 
   it("treats equivalent N-API and API variant shapes as equal", () => {
@@ -579,7 +598,7 @@ describe("merge user variant snapshots", () => {
     );
   });
 
-  it("restores everything when the local snapshot is empty", () => {
+  it("never restores into an empty local snapshot without an explicit restore request", () => {
     const remote = file("remote.sav", "r");
     const local = context([]);
     local.coverage = [
@@ -602,9 +621,41 @@ describe("merge user variant snapshots", () => {
       base: null,
     });
 
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(remote)]);
+    assert.deepEqual(result.restoreEntryIds, []);
     assert.equal(result.partial, true);
     assert.deepEqual(result.files, [remote]);
+    assert.deepEqual(result.unresolvedRemoteEntryIds, [
+      cloudSaveFileKey(remote),
+    ]);
+  });
+
+  it("does not automatically restore cloud files when a local scan confirms a missing path", () => {
+    const remote = file("remote.sav", "r");
+    const local = context([]);
+    local.coverage = [
+      {
+        candidateId: "candidate",
+        ruleId: "rule",
+        variantId,
+        rawPath: remote.rawPath,
+        selectedRoot: true,
+        authority: "authoritative",
+        outcome: "confirmed-missing",
+        enumeratedCompletely: true,
+        warningCodes: [],
+      },
+    ];
+    const result = mergeUserVariantSnapshots({
+      local,
+      remoteVariants: [variant],
+      remoteFiles: [remote],
+      base: null,
+    });
+
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.unresolvedRemoteEntryIds, [
+      cloudSaveFileKey(remote),
+    ]);
   });
 
   it("keeps an emulator snapshot pending when its only destination is incomplete", () => {
@@ -786,7 +837,7 @@ describe("merge user variant snapshots", () => {
     ]);
   });
 
-  it("restores the last file even when coverage could prove deletion", () => {
+  it("conflicts when the last local file disappeared", () => {
     const deleted = file("S0000.sl2", "a");
     const local = context([]);
     local.coverage = [
@@ -812,11 +863,13 @@ describe("merge user variant snapshots", () => {
 
     assert.deepEqual(result.files, [deleted]);
     assert.deepEqual(result.deleteRemoteEntryIds, []);
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(deleted)]);
-    assert.deepEqual(result.unresolvedRemoteEntryIds, []);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(deleted), local: null, remote: deleted },
+    ]);
   });
 
-  it("restores an empty local snapshot instead of conflicting with a changed remote", () => {
+  it("does not restore an empty local snapshot over a changed remote", () => {
     const previous = file("S0000.sl2", "a");
     const remote = file("S0000.sl2", "b");
     const local = context([]);
@@ -842,12 +895,14 @@ describe("merge user variant snapshots", () => {
     });
 
     assert.deepEqual(result.files, [remote]);
-    assert.deepEqual(result.conflicts, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(remote), local: null, remote },
+    ]);
     assert.deepEqual(result.deleteRemoteEntryIds, []);
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(remote)]);
+    assert.deepEqual(result.restoreEntryIds, []);
   });
 
-  it("restores the last file during a restore-only pre-launch sync", () => {
+  it("does not restore the last file during a restore-only pre-launch sync", () => {
     const deleted = file("S0000.sl2", "a");
     const local = context([]);
     local.coverage = [
@@ -874,10 +929,13 @@ describe("merge user variant snapshots", () => {
 
     assert.deepEqual(result.files, [deleted]);
     assert.deepEqual(result.deleteRemoteEntryIds, []);
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(deleted)]);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(deleted), local: null, remote: deleted },
+    ]);
   });
 
-  it("restores an installation-owned custom path instead of publishing its absence", () => {
+  it("preserves installation-owned custom paths without restoring them implicitly", () => {
     const rawPath = "<custom><windows><base>/Saves";
     const missing = file("slot.sav", "a", rawPath);
     const retained = file("settings.ini", "b", "<home>/other");
@@ -905,11 +963,14 @@ describe("merge user variant snapshots", () => {
     });
 
     assert.deepEqual(result.files, [missing, retained]);
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(missing)]);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.unresolvedRemoteEntryIds, [
+      cloudSaveFileKey(missing),
+    ]);
     assert.deepEqual(result.deleteRemoteEntryIds, []);
   });
 
-  it("restores instead of deleting when the root is missing", () => {
+  it("does not restore cloud files automatically when the root is missing", () => {
     const missing = file("missing.sav", "a");
     const retained = file("retained.sav", "b", "<home>/other");
     const local = context([retained]);
@@ -935,10 +996,13 @@ describe("merge user variant snapshots", () => {
     });
 
     assert.deepEqual(result.deleteRemoteEntryIds, []);
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(missing)]);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.unresolvedRemoteEntryIds, [
+      cloudSaveFileKey(missing),
+    ]);
   });
 
-  it("keeps Minecraft saves synced without local savestates and restores remote states", () => {
+  it("keeps Minecraft saves synced without local savestates and leaves remote states pending", () => {
     const saveRawPath = "<emulator>/rpcs3/NPUB31419/00000001";
     const stateRawPath = "<emulator>/rpcs3-state/NPUB31419";
     const saves = Array.from({ length: 9 }, (_, index) =>
@@ -993,7 +1057,10 @@ describe("merge user variant snapshots", () => {
       base: anchor(remoteFiles),
     });
     assert.deepEqual(missingState.deleteRemoteEntryIds, []);
-    assert.deepEqual(missingState.restoreEntryIds, [cloudSaveFileKey(state)]);
+    assert.deepEqual(missingState.restoreEntryIds, []);
+    assert.deepEqual(missingState.unresolvedRemoteEntryIds, [
+      cloudSaveFileKey(state),
+    ]);
 
     const restored = context(remoteFiles);
     restored.coverage = [
@@ -1080,7 +1147,7 @@ describe("merge user variant snapshots", () => {
     assert.equal(result.partial, false);
   });
 
-  it("restores only current-OS files when the local snapshot is empty", () => {
+  it("does not restore current-OS cloud files during routine sync on an empty install", () => {
     const windowsFile = file(
       "windows-slot.dat",
       "w",
@@ -1123,8 +1190,16 @@ describe("merge user variant snapshots", () => {
     });
 
     assert.deepEqual(result.files, [windowsFile, linuxFile]);
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(windowsFile)]);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.unresolvedRemoteEntryIds, []);
     assert.deepEqual(result.deleteRemoteEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      {
+        entryId: cloudSaveFileKey(windowsFile),
+        local: null,
+        remote: windowsFile,
+      },
+    ]);
   });
 
   it("conflicts when a locally deleted file changed remotely", () => {
@@ -1199,18 +1274,37 @@ describe("merge user variant snapshots", () => {
     assert.deepEqual(keepRemote.restoreEntryIds, [entryId]);
   });
 
-  it("applies a remote deletion to an unchanged local file", () => {
+  it("does not delete an unchanged local file when it is missing from the cloud", () => {
     const deleted = file("deleted.sav", "a");
     const retained = file("retained.sav", "b");
-    const result = mergeUserVariantSnapshots({
+    const input = {
       local: context([deleted, retained]),
       remoteVariants: [variant],
       remoteFiles: [retained],
       base: anchor([deleted, retained]),
-    });
+    };
+    const result = mergeUserVariantSnapshots(input);
 
-    assert.deepEqual(result.files, [retained]);
-    assert.deepEqual(result.deleteLocalEntryIds, [cloudSaveFileKey(deleted)]);
+    assert.deepEqual(result.files, [deleted, retained]);
+    assert.deepEqual(result.deleteLocalEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(deleted), local: deleted, remote: null },
+    ]);
+
+    const keepLocal = mergeUserVariantSnapshots({
+      ...input,
+      resolutions: new Map([[cloudSaveFileKey(deleted), "keep-local"]]),
+    });
+    assert.deepEqual(keepLocal.deleteLocalEntryIds, []);
+    assert.deepEqual(keepLocal.files, [deleted, retained]);
+
+    const keepRemote = mergeUserVariantSnapshots({
+      ...input,
+      resolutions: new Map([[cloudSaveFileKey(deleted), "keep-remote"]]),
+    });
+    assert.deepEqual(keepRemote.deleteLocalEntryIds, [
+      cloudSaveFileKey(deleted),
+    ]);
   });
 
   it("treats files from an explicitly re-added custom path as new", () => {
@@ -1274,7 +1368,10 @@ describe("merge user variant snapshots", () => {
     });
 
     assert.deepEqual(result.deleteRemoteEntryIds, []);
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(deleted)]);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.conflicts, [
+      { entryId: cloudSaveFileKey(deleted), local: null, remote: deleted },
+    ]);
   });
 
   it("conflicts only when both sides changed the same composite entry", () => {

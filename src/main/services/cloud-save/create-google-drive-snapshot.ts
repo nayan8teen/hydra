@@ -78,31 +78,40 @@ const uploadGoogleDriveSnapshotBlobs = async (
     });
   emitProgress(null);
 
-  // One listing lets every blob below resolve from the cached content index.
-  await GoogleDriveStorage.listBlobHashes().catch(() => []);
+  // One listing lets existing content-addressed blobs be reused without
+  // requiring a copy of every historical file to exist in the local scan.
+  // Listing failures are fatal: an upload must not assume that cloud content is
+  // missing and then try to source it from an unrelated local path.
+  const existingBlobHashes = new Set(await GoogleDriveStorage.listBlobHashes());
 
   await mapWithConcurrency(
     [...filesByBlob.values()],
     MAX_CONCURRENT_DRIVE_UPLOADS,
     async (group) => {
       const [file] = group;
-      const source =
-        sourceByBlob.get(blobKey(file)) ??
-        sourceByIdentity.get(cloudSaveFileKey(file));
-      if (
-        !source ||
-        source.hash !== file.hash ||
-        source.sizeBytes !== file.sizeBytes
-      ) {
-        throw new Error(`Missing local upload source for ${file.relativePath}`);
-      }
+      const key = blobKey(file);
+      if (!existingBlobHashes.has(file.hash)) {
+        const source =
+          sourceByBlob.get(key) ?? sourceByIdentity.get(cloudSaveFileKey(file));
+        if (
+          !source ||
+          source.hash !== file.hash ||
+          source.sizeBytes !== file.sizeBytes
+        ) {
+          throw new Error(
+            `Missing local upload source for ${file.relativePath}`
+          );
+        }
 
-      emitProgress(source.relativePath);
-      await GoogleDriveStorage.uploadBlob({
-        hash: file.hash,
-        absolutePath: source.absolutePath,
-        sizeBytes: file.sizeBytes,
-      });
+        emitProgress(source.relativePath);
+        await GoogleDriveStorage.uploadBlob({
+          hash: file.hash,
+          absolutePath: source.absolutePath,
+          sizeBytes: file.sizeBytes,
+        });
+      } else {
+        emitProgress(file.relativePath);
+      }
     },
     (_result, group) => {
       completedFiles += group.length;

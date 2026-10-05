@@ -309,12 +309,17 @@ export const restoreRemoteSnapshot = async (
     );
     await verifyDownloadedRestoreFiles(downloadedFiles, emitProgress);
 
-    const current = await assertSnapshotStillCurrent(gameId, snapshot);
-    const versionDecision = getRestoreVersionDecision(
-      snapshot,
-      current,
-      versionChangeAttempt
-    );
+    // A retained history file is immutable and intentionally is not the Drive
+    // head. Only the head snapshot participates in the concurrent-head guard;
+    // selected historical backups must remain restorable as their own version.
+    const isHistoricalSnapshot =
+      "isHead" in snapshot && snapshot.isHead === false;
+    const current = isHistoricalSnapshot
+      ? snapshot
+      : await assertSnapshotStillCurrent(gameId, snapshot);
+    const versionDecision = isHistoricalSnapshot
+      ? "stable"
+      : getRestoreVersionDecision(snapshot, current, versionChangeAttempt);
     if (versionDecision !== "stable") {
       if (versionDecision === "retry" && current) {
         return restoreRemoteSnapshot(

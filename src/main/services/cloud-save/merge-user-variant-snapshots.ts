@@ -9,7 +9,6 @@ import type {
 
 import { cloudSaveFileKey } from "./cloud-save-contract.js";
 import {
-  isEmulatorSaveRawPath,
   parseRetroArchGameRawPath,
   parseRetroArchStateRelativePath,
   parseRpcs3SaveRawPath,
@@ -28,7 +27,6 @@ interface MergeUserVariantSnapshotsInput {
   preserveLocalMissingRawPaths?: ReadonlySet<string>;
   preserveLocalMissingEntryIds?: ReadonlySet<string>;
   preserveCloudOnlyEntryIds?: ReadonlySet<string>;
-  restorableEmulatorEntryIds?: ReadonlySet<string>;
   treatLocalAsNewRawPaths?: ReadonlySet<string>;
 }
 
@@ -117,20 +115,18 @@ export const mergeUserVariantSnapshots = ({
   preserveLocalMissingRawPaths = new Set<string>(),
   preserveLocalMissingEntryIds = new Set<string>(),
   preserveCloudOnlyEntryIds = new Set<string>(),
-  restorableEmulatorEntryIds = new Set<string>(),
   treatLocalAsNewRawPaths = new Set<string>(),
 }: MergeUserVariantSnapshotsInput): CloudSaveMergeResult => {
   const localById = indexUnique(local.files);
   const remoteById = indexUnique(remoteFiles);
+  // Entries flagged unresolved in the anchor still describe the last-synced
+  // cloud state, so they remain a valid merge base: content-compared against
+  // them, a one-sided change resolves directionally instead of conflicting.
   const unresolvedBaseIds = new Set(base?.unresolvedRemoteEntryIds ?? []);
   const baseById = new Map(
     (base?.entries ?? [])
       .map((entry) => [cloudSaveFileKey(entry), entry] as const)
-      .filter(
-        ([entryId, entry]) =>
-          !unresolvedBaseIds.has(entryId) &&
-          !treatLocalAsNewRawPaths.has(entry.rawPath)
-      )
+      .filter(([, entry]) => !treatLocalAsNewRawPaths.has(entry.rawPath))
   );
   const ids = new Set([...localById.keys(), ...remoteById.keys()]);
   const files: SnapshotFile[] = [];
@@ -139,8 +135,6 @@ export const mergeUserVariantSnapshots = ({
   const deleteRemoteEntryIds = new Set<string>();
   const deleteLocalEntryIds = new Set<string>();
   const unresolvedRemoteEntryIds = new Set<string>();
-  const shouldRestoreEmptyLocalSnapshot =
-    local.files.length === 0 && remoteFiles.length > 0;
 
   const coverageFor = (file: SnapshotFile) =>
     local.coverage.filter(
@@ -175,6 +169,10 @@ export const mergeUserVariantSnapshots = ({
       provesDeletion: selectedCompleteRoot && !incomplete,
     };
   };
+
+  // Empty local snapshots are never an authorization to restore cloud data.
+  // The cloud-only case is retained below as unresolved until the user chooses
+  // a restore in the cloud-save browser.
 
   const slotChanges = new Map<string, { local: boolean; remote: boolean }>();
   for (const entryId of ids) {
@@ -253,10 +251,11 @@ export const mergeUserVariantSnapshots = ({
         files.push(localFile);
         continue;
       }
-      if (sameBytes(localFile, baseEntry)) {
-        deleteLocalEntryIds.add(entryId);
-        continue;
-      }
+      // The cloud no longer lists a file that exists locally. Whether the local
+      // copy changed since the base or not, deleting it implicitly is never
+      // safe: it may be an intentional remote deletion or a partial/lost cloud
+      // manifest. Surface a deletion conflict so the user chooses (keep local
+      // keeps or re-uploads the file, keep remote deletes it explicitly).
       const resolution = resolutions?.get(entryId);
       if (resolution === "keep-remote") {
         deleteLocalEntryIds.add(entryId);
@@ -280,7 +279,7 @@ export const mergeUserVariantSnapshots = ({
       }
       if (preserveLocalMissingRawPaths.has(remoteFile.rawPath)) {
         files.push(remoteFile);
-        restoreEntryIds.add(entryId);
+        unresolvedRemoteEntryIds.add(entryId);
         continue;
       }
 
@@ -289,49 +288,9 @@ export const mergeUserVariantSnapshots = ({
         files.push(remoteFile);
         continue;
       }
-      if (coverage.incomplete && restorableEmulatorEntryIds.has(entryId)) {
-        files.push(remoteFile);
-        restoreEntryIds.add(entryId);
-        if (coverage.incomplete) unresolvedRemoteEntryIds.add(entryId);
-        continue;
-      }
-      if (shouldRestoreEmptyLocalSnapshot) {
-        files.push(remoteFile);
-        if (
-          !coverage.incomplete ||
-          !isEmulatorSaveRawPath(remoteFile.rawPath)
-        ) {
-          restoreEntryIds.add(entryId);
-        }
-        if (!baseEntry || !coverage.hasCoverage || coverage.incomplete) {
-          unresolvedRemoteEntryIds.add(entryId);
-        }
-        continue;
-      }
-      if (!baseEntry) {
-        files.push(remoteFile);
-        unresolvedRemoteEntryIds.add(entryId);
-        if (!coverage.incomplete) {
-          restoreEntryIds.add(entryId);
-        }
-        continue;
-      }
-
-      if (!coverage.provesDeletion) {
-        files.push(remoteFile);
-        unresolvedRemoteEntryIds.add(entryId);
-        if (!coverage.incomplete) restoreEntryIds.add(entryId);
-        continue;
-      }
-
-      if (sameBytes(remoteFile, baseEntry)) {
-        // The remote save still matches the last synced state, but it is gone
-        // locally. That is ambiguous: it may be an intentional local deletion
-        // or an accidental loss (manual cleanup, reinstall, a reset profile).
-        // Never propagate it to the cloud implicitly, because that destroys
-        // the only remaining copy. Surface a conflict so the user chooses.
-        const resolution = resolutions?.get(entryId);
-        if (direction === "restore-only" || resolution === "keep-remote") {
+      const resolution = resolutions?.get(entryId);
+      if (baseEntry && coverage.provesDeletion) {
+        if (resolution === "keep-remote") {
           files.push(remoteFile);
           restoreEntryIds.add(entryId);
         } else if (resolution === "keep-local") {
@@ -342,18 +301,23 @@ export const mergeUserVariantSnapshots = ({
         }
         continue;
       }
-
-      const resolution = resolutions?.get(entryId);
-      if (resolution === "keep-local") {
-        deleteRemoteEntryIds.add(entryId);
-      } else {
-        files.push(remoteFile);
+      if (unresolvedBaseIds.has(entryId)) {
         if (resolution === "keep-remote") {
+          files.push(remoteFile);
           restoreEntryIds.add(entryId);
+        } else if (resolution === "keep-local") {
+          deleteRemoteEntryIds.add(entryId);
         } else {
-          conflicts.push({ entryId, local: null, remote: remoteFile });
+          files.push(remoteFile);
+          unresolvedRemoteEntryIds.add(entryId);
         }
+        continue;
       }
+      // A cloud-only file without proven prior local ownership is retained as
+      // pending. Sync must not materialize it locally; the user can explicitly
+      // restore this file or snapshot in the cloud-save browser.
+      files.push(remoteFile);
+      unresolvedRemoteEntryIds.add(entryId);
       continue;
     }
     if (!localFile && !remoteFile) {
@@ -373,22 +337,17 @@ export const mergeUserVariantSnapshots = ({
       files.push(localFile);
       continue;
     }
-    if (baseEntry && localEqualsBase && !remoteEqualsBase) {
-      files.push(remoteFile);
-      restoreEntryIds.add(entryId);
-      continue;
-    }
-
+    // A remote-only change to an existing local file is never applied without
+    // an explicit user request; surface it as a conflict instead.
     const resolution = resolutions?.get(entryId);
     if (resolution === "keep-local") {
       files.push(localFile);
+    } else if (resolution === "keep-remote") {
+      files.push(remoteFile);
+      restoreEntryIds.add(entryId);
     } else {
       files.push(remoteFile);
-      if (resolution === "keep-remote") {
-        restoreEntryIds.add(entryId);
-      } else {
-        conflicts.push({ entryId, local: localFile, remote: remoteFile });
-      }
+      conflicts.push({ entryId, local: localFile, remote: remoteFile });
     }
   }
 

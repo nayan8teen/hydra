@@ -85,6 +85,9 @@ import type {
   RetroArchLegacyBatteryCandidate,
   CloudSaveOverview,
   CloudSaveV2FileDetails,
+  CloudSaveHistorySnapshot,
+  CloudSaveSnapshotFiles,
+  CloudSaveSnapshotRestoreResult,
   GoogleDriveAccount,
   GoogleDriveConnectionStatus,
   GoogleDriveSettings,
@@ -168,6 +171,22 @@ declare global {
       objectId: string,
       shop: GameShop
     ) => Promise<CloudSaveV2FileDetails>;
+    listCloudSaveSnapshots: (
+      objectId: string,
+      shop: GameShop
+    ) => Promise<CloudSaveHistorySnapshot[]>;
+    getCloudSaveSnapshotFiles: (
+      objectId: string,
+      shop: GameShop,
+      snapshotId: string
+    ) => Promise<CloudSaveSnapshotFiles>;
+    restoreCloudSaveSnapshot: (
+      objectId: string,
+      shop: GameShop,
+      snapshotId: string,
+      entryIds: string[],
+      onProgress?: (progress: CloudSaveSyncProgressPayload) => void
+    ) => Promise<CloudSaveSnapshotRestoreResult>;
     getRetroArchLocalBatteryCandidates: (
       objectId: string,
       shop: GameShop

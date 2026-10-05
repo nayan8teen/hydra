@@ -70,19 +70,16 @@ export const decideRemoteSnapshotDeletion = (
   plan: RemoteSnapshotDeletionPlan,
   resolution?: CloudSaveConflictResolution
 ): RemoteSnapshotDeletionDecision => {
-  const hasConflicts = plan.conflictingAutomaticEntryIds.length > 0;
-  if (hasConflicts && !resolution) return { kind: "conflict" };
-  if (!hasConflicts && resolution) {
+  // The cloud head snapshot is gone while a sync anchor exists. That can be an
+  // intentional remote deletion or a lost manifest, so without an explicit
+  // resolution never touch the local saves: report a conflict and let the user
+  // choose (keep local re-uploads everything, keep remote deletes locally).
+  if (!resolution) return { kind: "conflict" };
+  if (plan.automaticEntryIds.length === 0) {
     throw new Error("cloud_save_conflict_no_longer_exists");
   }
   if (resolution === "keep-local") {
     return { kind: "upload", uploadEntryIds: plan.automaticEntryIds };
   }
-  return {
-    kind: "accept",
-    deleteLocalEntryIds:
-      resolution === "keep-remote"
-        ? plan.automaticEntryIds
-        : plan.unchangedAutomaticEntryIds,
-  };
+  return { kind: "accept", deleteLocalEntryIds: plan.automaticEntryIds };
 };

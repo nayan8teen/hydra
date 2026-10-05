@@ -9,5 +9,12 @@ export const listRemoteGameSnapshots = async (
   shop: GameShop
 ): Promise<RemoteSnapshotSummary[]> => {
   const manifestRef = await GoogleDriveStorage.readManifest(shop, objectId);
-  return manifestRef ? [toGoogleDriveSnapshotSummary(manifestRef)] : [];
+  if (!manifestRef) return [];
+  const history = await GoogleDriveStorage.listManifestHistory(shop, objectId);
+  const unique = new Map<number, (typeof history)[number]>();
+  for (const ref of history) unique.set(ref.manifest.version, ref);
+  unique.set(manifestRef.manifest.version, manifestRef);
+  return [...unique.values()]
+    .sort((left, right) => right.manifest.version - left.manifest.version)
+    .map(toGoogleDriveSnapshotSummary);
 };

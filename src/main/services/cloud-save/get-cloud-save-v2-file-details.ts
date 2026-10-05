@@ -141,7 +141,7 @@ export const getCloudSaveV2FileDetails = async (
   }
   if (analysis.context.game && provider) {
     const pending = new Set(analysis.merge.unresolvedRemoteEntryIds);
-    const safeAutomatic = new Set(analysis.restorableEmulatorEntryIds);
+    const safeAutomatic = new Set(analysis.merge.restoreEntryIds);
     const grouped = groupEmulatorRestoreDestinations(
       analysis.remoteManifest?.files ?? [],
       pending,

@@ -111,7 +111,6 @@ describe("resolved cloud save merge", () => {
       pendingCustomPathRawPaths: [],
       installationOwnedCustomPathRawPaths: [],
       preserveCloudOnlyEntryIds: [cloudSaveFileKey(transferPak)],
-      restorableEmulatorEntryIds: [],
     } as Parameters<typeof resolveAnalyzedCloudSaveMerge>[0];
 
     const result = resolveAnalyzedCloudSaveMerge(analysis, "keep-local");
@@ -168,7 +167,6 @@ describe("resolved cloud save merge", () => {
       pendingCustomPathRawPaths: [],
       installationOwnedCustomPathRawPaths: [protectedFile.rawPath],
       preserveCloudOnlyEntryIds: [],
-      restorableEmulatorEntryIds: [],
     } as Parameters<typeof resolveAnalyzedCloudSaveMerge>[0];
 
     const result = resolveAnalyzedCloudSaveMerge(analysis, "keep-local");
@@ -179,7 +177,10 @@ describe("resolved cloud save merge", () => {
           cloudSaveFileKey(candidate) === cloudSaveFileKey(protectedFile)
       )
     );
-    assert.deepEqual(result.restoreEntryIds, [cloudSaveFileKey(protectedFile)]);
+    assert.deepEqual(result.restoreEntryIds, []);
+    assert.deepEqual(result.unresolvedRemoteEntryIds, [
+      cloudSaveFileKey(protectedFile),
+    ]);
     assert.deepEqual(result.deleteRemoteEntryIds, []);
   });
 });
