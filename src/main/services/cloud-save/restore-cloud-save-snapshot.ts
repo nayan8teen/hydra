@@ -13,6 +13,7 @@ import { getCloudSaveSnapshotFiles } from "./get-cloud-save-snapshot-files";
 import { listCloudSaveSnapshots } from "./list-cloud-save-snapshots";
 import { restoreRemoteSnapshot } from "./restore-remote-snapshot";
 import { buildLocalGameSnapshotContext } from "./build-local-game-snapshot";
+import { reconcileLocalSnapshotTargets } from "./reconcile-local-snapshot-targets";
 import { buildCloudSaveAggregateHash } from "./snapshot-aggregate-hash";
 import {
   assertCloudSaveRemoteAccess,
@@ -89,7 +90,33 @@ export const restoreCloudSaveSnapshotFiles = async (
       // or rewriting any other local save. Unselected cloud files are retained
       // in the manifest; their blobs are already stored on Drive.
       progress("analyzing", 0, entryIds.length);
-      const local = await buildLocalGameSnapshotContext(objectId, shop);
+      // The scan can attribute a restored file to a different raw path,
+      // relative path or variant than the snapshot entry it came from. Adopt the
+      // remote identity before matching the selection back to local files, or a
+      // completed restore is rejected as "did not match the selected backup".
+      const scanned = await buildLocalGameSnapshotContext(
+        objectId,
+        shop,
+        undefined,
+        {
+          remoteFiles: details.files,
+        }
+      );
+      const local = await reconcileLocalSnapshotTargets({
+        objectId,
+        shop,
+        local: scanned,
+        remoteManifest: {
+          snapshot: {
+            id: snapshot.id,
+            version: snapshot.version,
+            shop,
+            objectId,
+          },
+          variants: details.variants,
+          files: details.files,
+        },
+      });
       const headRef = await GoogleDriveStorage.readManifest(shop, objectId);
       if (!headRef) throw new Error("cloud_save_snapshot_not_found");
       const filesById = new Map(
