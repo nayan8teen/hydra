@@ -16,6 +16,7 @@ import "./cloud-save";
 import "./connectivity";
 import "./download-sources";
 import "./friends";
+import "./game-installation";
 import "./google-drive";
 import "./hardware";
 import "./library";

@@ -38,6 +38,7 @@ import { startSteamSyncOnStartup } from "./services/steam-integration/steam-star
 import { migrateEmulatorCloudSaveDefaults } from "./services/cloud-save/automatic-sync-emulator-migration";
 import { watchSteamLibraries } from "./services/steam-integration/steam-install-watcher";
 import { migrateGameVisibilityFields } from "./services/library-sync/game-visibility-migration";
+import { reconcileInstallJobsOnStartup } from "./services/game-installation";
 
 const hasMissingSeedFiles = async (download: Download): Promise<boolean> => {
   if (!download.folderName) return false;
@@ -78,6 +79,10 @@ export const loadState = async () => {
   Wine.syncUserPreferences(userPreferences);
 
   await import("./events");
+
+  // Interrupted installs are never relaunched blindly; they are reported for
+  // review so a second installer can only be started on purpose.
+  void reconcileInstallJobsOnStartup();
 
   void GoogleDriveService.setup().catch((error) =>
     logger.warn("Google Drive setup failed", error)

@@ -4,6 +4,7 @@ import {
   useAppSelector,
   useDownload,
   useDownloadLayout,
+  useInstallJobs,
   useLibrary,
 } from "@renderer/hooks";
 
@@ -46,6 +47,9 @@ export default function Downloads() {
   };
 
   const { lastPacket } = useDownload();
+
+  const { getInstallJob, cancelInstallation, retryInstallation } =
+    useInstallJobs();
 
   const [seedingStatus, setSeedingStatus] = useState<SeedingStatus[]>([]);
 
@@ -195,6 +199,9 @@ export default function Downloads() {
                 library={group.library}
                 openDeleteGameModal={handleOpenDeleteGameModal}
                 openGameInstaller={handleOpenGameInstaller}
+                getInstallJob={getInstallJob}
+                cancelInstallation={cancelInstallation}
+                retryInstallation={retryInstallation}
                 seedingStatus={seedingStatus}
                 queuedGameIds={group.queuedGameIds}
               />

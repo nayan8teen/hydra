@@ -8,6 +8,7 @@ import type {
 } from "./level.types";
 import type { GameShop, UnlockedAchievement } from "./game.types";
 import type { ArtworkAssetType } from "./artwork.types";
+import type { DownloadInstallerProvider } from "./install.types";
 import type { GameContentWarning } from "./souvenir.types";
 
 export type FriendRequestAction = "ACCEPTED" | "REFUSED" | "CANCEL";
@@ -43,6 +44,11 @@ export interface DownloadSource {
   url: string;
   status: DownloadSourceStatus;
   downloadCount: number;
+  /**
+   * Installer automation Hydra may run for this source's packages. It is
+   * assigned explicitly by the user in Settings, never inferred.
+   */
+  installerProvider?: DownloadInstallerProvider | null;
   fingerprint?: string;
   isRemote?: true;
   createdAt: string;
@@ -163,6 +169,10 @@ export interface StartGameDownloadPayload {
   downloader: Downloader;
   automaticallyExtract: boolean;
   automaticallyDeleteArchiveFiles: boolean;
+  /** Source the repack came from, used to resolve its installer provider. */
+  downloadSourceId?: string;
+  /** Per-download override for automatic installation when it is available. */
+  automaticallyInstall?: boolean;
   fileSize?: string | null;
   fileIndices?: number[];
   selectedFilesSize?: number | null;
@@ -726,6 +736,7 @@ export * from "./artwork.types";
 export * from "./cloud-save.types";
 export * from "./google-drive.types";
 export * from "./souvenir.types";
+export * from "./install.types";
 
 export type ExtractionFailure =
   | { reason: "unsupported-format"; format: string }

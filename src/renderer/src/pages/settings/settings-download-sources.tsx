@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from "react";
 
 import {
   TextField,
+  SelectField,
   Button,
   Badge,
   ConfirmationModal,
@@ -293,6 +294,33 @@ export function SettingsDownloadSources() {
                   </small>
                 </button>
               </div>
+
+              <SelectField
+                label={t("download_source_installer_provider")}
+                value={downloadSource.installerProvider ?? ""}
+                options={[
+                  {
+                    key: "none",
+                    value: "",
+                    label: t("download_source_no_installer"),
+                  },
+                  { key: "fitgirl", value: "fitgirl", label: "FitGirl" },
+                ]}
+                onChange={async (event) => {
+                  const updated =
+                    await window.electron.setDownloadSourceInstallerProvider(
+                      downloadSource.id,
+                      event.target.value === "fitgirl" ? "fitgirl" : null
+                    );
+
+                  setDownloadSources((sources) =>
+                    sources.map((source) =>
+                      source.id === updated.id ? updated : source
+                    )
+                  );
+                }}
+              />
+              <small>{t("download_source_installer_provider_hint")}</small>
 
               <TextField
                 label={t("download_source_url")}

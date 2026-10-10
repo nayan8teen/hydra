@@ -13,6 +13,7 @@ export const levelKeys = {
   gameShopCacheItem: (shop: GameShop, objectId: string, language: string) =>
     `${shop}:${objectId}:${language}`,
   downloads: "downloads",
+  installJobs: "install-jobs",
   downloadLayoutState: "downloadLayoutState",
   userPreferences: "userPreferences",
   language: "language",

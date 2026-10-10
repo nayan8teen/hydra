@@ -42,6 +42,8 @@ import type {
   DiskUsage,
   NetworkInterface,
   DownloadSource,
+  DownloadInstallerProvider,
+  InstallJob,
   LocalNotification,
   ProtonVersion,
   CreateSteamShortcutOptions,
@@ -998,6 +1000,20 @@ declare global {
     onArchiveDeletionPrompt: (
       cb: (archivePaths: string[]) => void
     ) => () => Electron.IpcRenderer;
+
+    /* Game installation */
+    getInstallJobs: () => Promise<InstallJob[]>;
+    cancelGameInstallation: (
+      shop: GameShop,
+      objectId: string
+    ) => Promise<InstallJob | null>;
+    retryGameInstallation: (
+      shop: GameShop,
+      objectId: string
+    ) => Promise<InstallJob | null>;
+    onInstallJobUpdated: (
+      cb: (job: InstallJob) => void
+    ) => () => Electron.IpcRenderer;
     deleteArchive: (filePath: string) => Promise<boolean>;
     getDefaultWinePrefixSelectionPath: () => Promise<string | null>;
     createSteamShortcut: (
@@ -1015,6 +1031,10 @@ declare global {
       downloadSourceId?: string
     ) => Promise<void>;
     getDownloadSources: () => Promise<DownloadSource[]>;
+    setDownloadSourceInstallerProvider: (
+      sourceId: string,
+      installerProvider: DownloadInstallerProvider | null
+    ) => Promise<DownloadSource>;
     syncDownloadSources: () => Promise<void>;
     getDownloadSourcesCheckBaseline: () => Promise<string | null>;
     getDownloadSourcesSinceValue: () => Promise<string | null>;

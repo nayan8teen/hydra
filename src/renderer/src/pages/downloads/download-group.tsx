@@ -1,4 +1,4 @@
-import type { GameShop, LibraryGame, SeedingStatus } from "@types";
+import type { GameShop, InstallJob, LibraryGame, SeedingStatus } from "@types";
 
 import {
   Badge,
@@ -24,6 +24,7 @@ import {
   useDate,
 } from "@renderer/hooks";
 
+import { DownloadInstallStatus } from "./download-install-status";
 import "./download-group.scss";
 import { useTranslation } from "react-i18next";
 import {
@@ -591,6 +592,9 @@ export interface DownloadGroupProps {
   title: string;
   openDeleteGameModal: (shop: GameShop, objectId: string) => void;
   openGameInstaller: (shop: GameShop, objectId: string) => void;
+  getInstallJob: (shop: GameShop, objectId: string) => InstallJob | undefined;
+  cancelInstallation: (shop: GameShop, objectId: string) => Promise<void>;
+  retryInstallation: (shop: GameShop, objectId: string) => Promise<void>;
   seedingStatus: SeedingStatus[];
   queuedGameIds?: string[];
 }
@@ -600,6 +604,9 @@ export function DownloadGroup({
   title,
   openDeleteGameModal,
   openGameInstaller,
+  getInstallJob,
+  cancelInstallation,
+  retryInstallation,
   seedingStatus,
   queuedGameIds = [],
 }: Readonly<DownloadGroupProps>) {
@@ -1120,6 +1127,8 @@ export function DownloadGroup({
 
         <ul className="download-group__simple-list">
           {downloadInfo.map(({ game, size, progress, isSeeding: seeding }) => {
+            const installJob = getInstallJob(game.shop, game.objectId);
+
             return (
               <li key={game.id} className="download-group__simple-card">
                 <button
@@ -1167,6 +1176,22 @@ export function DownloadGroup({
                         </span>
                       )}
                     </div>
+                    {installJob && (
+                      <div className="download-group__simple-meta-row">
+                        <DownloadInstallStatus
+                          job={installJob}
+                          onCancel={() =>
+                            cancelInstallation(game.shop, game.objectId)
+                          }
+                          onRetry={() =>
+                            retryInstallation(game.shop, game.objectId)
+                          }
+                          onOpenInstaller={() =>
+                            openGameInstaller(game.shop, game.objectId)
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 

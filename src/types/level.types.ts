@@ -2,6 +2,7 @@ import type { Downloader } from "@shared";
 import type { GameShop } from "./game.types";
 import type { DownloadStatus } from "./download.types";
 import type { ClassicsDisc } from "./emulator.types";
+import type { AutomaticInstallationPreferences } from "./install.types";
 
 export type SubscriptionStatus = "active" | "pending" | "cancelled";
 
@@ -106,6 +107,10 @@ export interface Download {
   extractionProgress?: number;
   automaticallyExtract: boolean;
   automaticallyDeleteArchiveFiles: boolean;
+  /** Source the repack came from; resolved to an installer provider (if any). */
+  downloadSourceId?: string;
+  /** Per-download choice to install the package once it is ready. */
+  automaticallyInstall?: boolean;
   fileIndices?: number[];
   selectedFilesSize?: number | null;
   customTrackers?: string[];
@@ -198,6 +203,8 @@ export interface UserPreferences {
   classicsUseHeroLayout?: boolean;
   hideLibraryGameBadges?: boolean;
   hideLibraryReadySizeBadges?: boolean;
+  /** Automatic installation preferences; absent for existing profiles. */
+  automaticInstallation?: AutomaticInstallationPreferences;
   hideLibraryClassicsBadges?: boolean;
   hideSteamLibraryBadges?: boolean;
   hideLibraryAchievementProgress?: boolean;

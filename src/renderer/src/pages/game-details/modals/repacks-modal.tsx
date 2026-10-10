@@ -48,6 +48,7 @@ export interface RepacksModalProps {
     fileIndices?: number[],
     selectedFilesSize?: number | null,
     automaticallyDeleteArchiveFiles?: boolean,
+    automaticallyInstall?: boolean,
     signal?: AbortSignal
   ) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
@@ -85,6 +86,13 @@ export function RepacksModal({
   const userPreferences = useAppSelector(
     (state) => state.userPreferences.value
   );
+
+  const getInstallerProvider = (repackToResolve: GameRepack | null) =>
+    repackToResolve
+      ? (downloadSources.find(
+          (source) => source.id === repackToResolve.downloadSourceId
+        )?.installerProvider ?? null)
+      : null;
 
   useEffect(() => {
     const fetchDownloadSources = async () => {
@@ -275,6 +283,7 @@ export function RepacksModal({
         onClose={() => setShowSelectFolderModal(false)}
         startDownload={startDownload}
         repack={repack}
+        installerProvider={getInstallerProvider(repack)}
       />
 
       <Modal

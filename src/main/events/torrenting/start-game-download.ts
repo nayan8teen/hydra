@@ -29,6 +29,8 @@ const startGameDownload = async (
     uri,
     automaticallyExtract,
     automaticallyDeleteArchiveFiles,
+    downloadSourceId,
+    automaticallyInstall,
     fileSize,
     fileIndices,
     selectedFilesSize,
@@ -63,6 +65,10 @@ const startGameDownload = async (
       extracting: false,
       automaticallyExtract,
       automaticallyDeleteArchiveFiles,
+      // Provenance is persisted so a completed download can still resolve its
+      // installer provider (or not) after a restart.
+      downloadSourceId,
+      automaticallyInstall: automaticallyInstall === true,
       fileIndices,
       selectedFilesSize,
       fileSize: selectedFilesSize ?? parsedFileSize,
