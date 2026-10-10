@@ -29,6 +29,8 @@ const addGameToQueue = async (
     uri,
     automaticallyExtract,
     automaticallyDeleteArchiveFiles,
+    downloadSourceId,
+    automaticallyInstall,
     fileSize,
     fileIndices,
     selectedFilesSize,
@@ -60,6 +62,10 @@ const addGameToQueue = async (
       extracting: false,
       automaticallyExtract,
       automaticallyDeleteArchiveFiles,
+      // Provenance is persisted so a queued download keeps its installer
+      // provider and the user's per-download choice.
+      downloadSourceId,
+      automaticallyInstall: automaticallyInstall === true,
       fileIndices,
       selectedFilesSize,
       customTrackers: globalTrackers,

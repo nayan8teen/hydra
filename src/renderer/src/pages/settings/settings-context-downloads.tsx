@@ -1,10 +1,20 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { CheckboxField, SelectField, TextField } from "@renderer/components";
+import {
+  Button,
+  CheckboxField,
+  SelectField,
+  TextField,
+} from "@renderer/components";
 import { settingsContext } from "@renderer/context";
 import { useAppSelector } from "@renderer/hooks";
-import type { NetworkInterface, UserPreferences } from "@types";
+import type {
+  AutomaticInstallationPreferences,
+  AutomaticInstallationProviderPreferences,
+  NetworkInterface,
+  UserPreferences,
+} from "@types";
 import { SettingsGlobalTrackers } from "./settings-global-trackers";
 
 import "./settings-general.scss";
@@ -36,6 +46,16 @@ const buildForm = (preferences: UserPreferences | null) => ({
   deleteArchiveFilesAfterExtractionByDefault:
     preferences?.deleteArchiveFilesAfterExtractionByDefault ?? false,
   torrentNetworkInterface: preferences?.torrentNetworkInterface ?? "",
+  gameInstallationsPath:
+    preferences?.automaticInstallation?.baseDirectory ?? "",
+  fitgirlAutomaticInstallation:
+    preferences?.automaticInstallation?.providers?.fitgirl?.enabled ?? false,
+  fitgirlInstallDirectoryOverride:
+    preferences?.automaticInstallation?.providers?.fitgirl?.installDirectory ??
+    "",
+  fitgirlUnattendedInstallation:
+    preferences?.automaticInstallation?.providers?.fitgirl?.options
+      ?.unattended === true,
 });
 
 export function SettingsContextDownloads() {
@@ -115,6 +135,70 @@ export function SettingsContextDownloads() {
   const handleChange = (values: Partial<typeof form>) => {
     setForm((prev) => ({ ...prev, ...values }));
     updateUserPreferences(values);
+  };
+
+  /**
+   * `updateUserPreferences` merges top-level keys, so the whole
+   * `automaticInstallation` object has to be sent on every edit.
+   */
+  const updateAutomaticInstallation = (
+    overrides: {
+      baseDirectory?: string | null;
+      fitgirl?: AutomaticInstallationProviderPreferences;
+    } = {}
+  ) => {
+    const current: AutomaticInstallationPreferences =
+      userPreferences?.automaticInstallation ?? {};
+    const automaticInstallation: AutomaticInstallationPreferences = {
+      ...current,
+      baseDirectory:
+        overrides.baseDirectory !== undefined
+          ? overrides.baseDirectory || null
+          : (current.baseDirectory ?? null),
+      providers: {
+        ...current.providers,
+        fitgirl: { ...current.providers?.fitgirl, ...overrides.fitgirl },
+      },
+    };
+
+    setForm((prev) => ({
+      ...prev,
+      gameInstallationsPath: automaticInstallation.baseDirectory ?? "",
+      fitgirlAutomaticInstallation:
+        automaticInstallation.providers?.fitgirl?.enabled ?? false,
+      fitgirlInstallDirectoryOverride:
+        automaticInstallation.providers?.fitgirl?.installDirectory ?? "",
+      fitgirlUnattendedInstallation:
+        automaticInstallation.providers?.fitgirl?.options?.unattended === true,
+    }));
+
+    updateUserPreferences({ automaticInstallation });
+  };
+
+  const pickGameInstallationsPath = async () => {
+    const { filePaths } = await window.electron.showOpenDialog({
+      defaultPath: form.gameInstallationsPath || undefined,
+      properties: ["openDirectory", "createDirectory"],
+    });
+
+    const selectedPath = filePaths?.[0];
+
+    if (selectedPath)
+      updateAutomaticInstallation({ baseDirectory: selectedPath });
+  };
+
+  const pickFitgirlInstallationsPath = async () => {
+    const { filePaths } = await window.electron.showOpenDialog({
+      defaultPath: form.fitgirlInstallDirectoryOverride || undefined,
+      properties: ["openDirectory", "createDirectory"],
+    });
+
+    const selectedPath = filePaths?.[0];
+
+    if (selectedPath)
+      updateAutomaticInstallation({
+        fitgirl: { installDirectory: selectedPath },
+      });
   };
 
   const handleMaxDownloadSpeedBlur = () => {
@@ -246,6 +330,60 @@ export function SettingsContextDownloads() {
             })
           }
         />
+
+        <small>{t("automatic_installation_description")}</small>
+
+        <TextField
+          label={t("game_installations_path")}
+          value={form.gameInstallationsPath}
+          readOnly
+          disabled
+          rightContent={
+            <Button theme="outline" onClick={pickGameInstallationsPath}>
+              {t("change")}
+            </Button>
+          }
+        />
+
+        <CheckboxField
+          label={t("fitgirl_automatic_installation")}
+          checked={form.fitgirlAutomaticInstallation}
+          onChange={() =>
+            updateAutomaticInstallation({
+              fitgirl: { enabled: !form.fitgirlAutomaticInstallation },
+            })
+          }
+        />
+
+        <TextField
+          label={t("fitgirl_install_directory_override")}
+          value={form.fitgirlInstallDirectoryOverride}
+          readOnly
+          disabled
+          rightContent={
+            <Button theme="outline" onClick={pickFitgirlInstallationsPath}>
+              {t("change")}
+            </Button>
+          }
+        />
+        <small>{t("fitgirl_install_directory_override_hint")}</small>
+
+        <CheckboxField
+          label={t("fitgirl_unattended_installation")}
+          checked={form.fitgirlUnattendedInstallation}
+          onChange={() =>
+            updateAutomaticInstallation({
+              fitgirl: {
+                options: {
+                  ...userPreferences?.automaticInstallation?.providers?.fitgirl
+                    ?.options,
+                  unattended: !form.fitgirlUnattendedInstallation,
+                },
+              },
+            })
+          }
+        />
+        <small>{t("fitgirl_unattended_installation_hint")}</small>
 
         {(window.electron.platform === "win32" ||
           window.electron.platform === "linux") && (

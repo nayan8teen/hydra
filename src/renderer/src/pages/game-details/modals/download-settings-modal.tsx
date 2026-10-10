@@ -34,7 +34,12 @@ import {
   getDownloadersForUri,
   parseBytes,
 } from "@shared";
-import type { GameRepack, TorrentFile, TorrentFilesResponse } from "@types";
+import type {
+  DownloadInstallerProvider,
+  GameRepack,
+  TorrentFile,
+  TorrentFilesResponse,
+} from "@types";
 import { motion } from "framer-motion";
 import {
   type ReactNode,
@@ -67,9 +72,12 @@ export interface DownloadSettingsModalProps {
     fileIndices?: number[],
     selectedFilesSize?: number | null,
     automaticallyDeleteArchiveFiles?: boolean,
+    automaticallyInstall?: boolean,
     signal?: AbortSignal
   ) => Promise<{ ok: boolean; error?: string }>;
   repack: GameRepack | null;
+  /** Installer automation available for this repack's source, if any. */
+  installerProvider: DownloadInstallerProvider | null;
 }
 
 type TorrentSortColumn = "name" | "size" | "downloading";
@@ -244,6 +252,7 @@ export function DownloadSettingsModal({
   onClose,
   startDownload,
   repack,
+  installerProvider,
 }: Readonly<DownloadSettingsModalProps>) {
   const { t } = useTranslation("game_details");
 
@@ -282,6 +291,7 @@ export function DownloadSettingsModal({
   ] = useState(
     userPreferences?.deleteArchiveFilesAfterExtractionByDefault ?? false
   );
+  const [automaticallyInstall, setAutomaticallyInstall] = useState(false);
   const [selectedDownloader, setSelectedDownloader] =
     useState<Downloader | null>(null);
   const [hasWritePermission, setHasWritePermission] = useState<boolean | null>(
@@ -545,6 +555,7 @@ export function DownloadSettingsModal({
       setAutomaticExtractionEnabled(
         userPreferences?.extractFilesByDefault ?? true
       );
+      setAutomaticallyInstall(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -1024,6 +1035,7 @@ export function DownloadSettingsModal({
           selectedFileIndices,
           totalSelectedSize,
           deleteArchiveFilesAfterExtraction,
+          automaticallyInstall,
           abortController.signal
         );
 
@@ -1492,6 +1504,17 @@ export function DownloadSettingsModal({
             setAutomaticExtractionEnabled(!automaticExtractionEnabled)
           }
         />
+
+        {installerProvider === "fitgirl" &&
+          window.electron.platform === "win32" &&
+          userPreferences?.automaticInstallation?.providers?.fitgirl
+            ?.enabled === true && (
+            <CheckboxField
+              label={t("automatic_install_when_ready")}
+              checked={automaticallyInstall}
+              onChange={() => setAutomaticallyInstall((enabled) => !enabled)}
+            />
+          )}
 
         <CheckboxField
           label={t("delete_archive_files_after_extraction")}

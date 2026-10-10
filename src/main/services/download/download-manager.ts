@@ -52,6 +52,7 @@ import {
   setDownloadLayoutQueues,
 } from "../download-layout-state";
 import { shouldFinalizeDownload } from "./download-completion";
+import { enqueueAutomaticInstallation } from "../game-installation";
 import { describeErrorCause } from "@main/helpers/download-error-handler";
 import {
   DISK_SPACE_CHECK_INTERVAL_MS,
@@ -809,21 +810,26 @@ export class DownloadManager {
       if (shouldPauseSeedingForExtraction) {
         await this.cancelDownload(gameId);
 
-        void this.handleExtraction(download, game).finally(() => {
-          this.resumeSeeding(download).catch((error) => {
-            logger.error(
-              "[DownloadManager] Failed to resume seeding after extraction",
-              error
-            );
+        void this.handleExtraction(download, game)
+          .then(() => enqueueAutomaticInstallation(download, game))
+          .finally(() => {
+            this.resumeSeeding(download).catch((error) => {
+              logger.error(
+                "[DownloadManager] Failed to resume seeding after extraction",
+                error
+              );
+            });
           });
-        });
       } else {
-        void this.handleExtraction(download, game);
+        void this.handleExtraction(download, game).then(() =>
+          enqueueAutomaticInstallation(download, game)
+        );
       }
     } else {
       const gameFilesManager = new GameFilesManager(game.shop, game.objectId);
       gameFilesManager.searchAndBindExecutable();
       void gameFilesManager.autoLinkClassicsDiscs();
+      void enqueueAutomaticInstallation(download, game);
     }
 
     await this.processNextQueuedDownload();

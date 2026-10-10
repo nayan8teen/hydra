@@ -26,6 +26,8 @@ import type {
   ProtonVersion,
   TorrentFilesResponse,
   DownloadLayoutState,
+  InstallJob,
+  DownloadInstallerProvider,
   EmulatorSystem,
   EmulatorBinary,
   EmulatorInstallProgress,
@@ -971,6 +973,15 @@ contextBridge.exposeInMainWorld("electron", {
   removeDownloadSource: (url: string, removeAll?: boolean) =>
     ipcRenderer.invoke("removeDownloadSource", url, removeAll),
   getDownloadSources: () => ipcRenderer.invoke("getDownloadSources"),
+  setDownloadSourceInstallerProvider: (
+    sourceId: string,
+    installerProvider: DownloadInstallerProvider | null
+  ) =>
+    ipcRenderer.invoke(
+      "setDownloadSourceInstallerProvider",
+      sourceId,
+      installerProvider
+    ),
   syncDownloadSources: () => ipcRenderer.invoke("syncDownloadSources"),
   getDownloadSourcesCheckBaseline: () =>
     ipcRenderer.invoke("getDownloadSourcesCheckBaseline"),
@@ -1359,6 +1370,19 @@ contextBridge.exposeInMainWorld("electron", {
       cb(gameTitle);
     ipcRenderer.on("on-download-halted", listener);
     return () => ipcRenderer.removeListener("on-download-halted", listener);
+  },
+
+  /* Game installation */
+  getInstallJobs: () => ipcRenderer.invoke("getInstallJobs"),
+  cancelGameInstallation: (shop: GameShop, objectId: string) =>
+    ipcRenderer.invoke("cancelGameInstallation", shop, objectId),
+  retryGameInstallation: (shop: GameShop, objectId: string) =>
+    ipcRenderer.invoke("retryGameInstallation", shop, objectId),
+  onInstallJobUpdated: (cb: (job: InstallJob) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, job: InstallJob) =>
+      cb(job);
+    ipcRenderer.on("on-install-job-updated", listener);
+    return () => ipcRenderer.removeListener("on-install-job-updated", listener);
   },
   onGameExecutableNotFound: (
     cb: (shop: GameShop, objectId: string) => void

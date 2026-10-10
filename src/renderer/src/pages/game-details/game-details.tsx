@@ -113,6 +113,7 @@ export default function GameDetails() {
             fileIndices?: number[],
             selectedFilesSize?: number | null,
             automaticallyDeleteArchiveFiles = false,
+            automaticallyInstall = false,
             signal?: AbortSignal
           ) => {
             const payload = {
@@ -124,6 +125,8 @@ export default function GameDetails() {
               uri: selectRepackUri(repack, downloader),
               automaticallyExtract,
               automaticallyDeleteArchiveFiles,
+              automaticallyInstall,
+              downloadSourceId: repack.downloadSourceId,
               fileSize: repack.fileSize,
               fileIndices,
               selectedFilesSize,

@@ -34,3 +34,53 @@
     gap: globals.$spacing-unit;
   }
 }
+
+.download-group {
+  &__install-status {
+    display: flex;
+    align-items: center;
+    gap: calc(globals.$spacing-unit * 1.5);
+    font-weight: 500;
+    font-size: 13px;
+    color: globals.$muted-color;
+    min-width: 0;
+
+    &--succeeded {
+      color: globals.$success-color;
+    }
+
+    &--failed {
+      color: globals.$error-color;
+    }
+  }
+
+  &__install-status-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__install-status-action {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    color: globals.$muted-color;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    flex-shrink: 0;
+    transition: opacity 0.2s ease;
+
+    &:hover {
+      opacity: 0.8;
+    }
+
+    &:focus,
+    &:focus-visible {
+      outline: 2px solid globals.$border-color;
+      outline-offset: 2px;
+    }
+  }
+}
