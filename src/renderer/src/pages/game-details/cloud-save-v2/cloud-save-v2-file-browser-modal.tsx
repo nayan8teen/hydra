@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ArrowClockwiseIcon,
   CircleNotchIcon,
+  ClockCounterClockwiseIcon,
   CloudIcon,
   MonitorIcon,
   PlusIcon,
@@ -42,6 +43,7 @@ import {
   hasCloudSaveDataToDelete,
 } from "./cloud-save-presentation";
 import { CloudSaveCustomPathApprovalModal } from "./cloud-save-custom-path-approval-modal";
+import { CloudSaveV2SnapshotHistory } from "./cloud-save-v2-snapshot-history";
 
 type EmulatorDestination = NonNullable<
   CloudSaveV2FileDetails["emulatorDestinations"]
@@ -343,10 +345,13 @@ export function CloudSaveV2FileBrowserModal({
     string | null
   >(null);
   const [isBindingRpcs3Profile, setIsBindingRpcs3Profile] = useState(false);
+  const [isSnapshotHistoryVisible, setIsSnapshotHistoryVisible] =
+    useState(false);
   useEffect(() => {
     setPendingEmulatorDestination(null);
     setSelectedEmulatorPath(null);
     setDidAttemptEmulatorSync(false);
+    setIsSnapshotHistoryVisible(false);
   }, [visible, objectId, shop]);
   const isConflict = details?.state === "conflict";
   const pendingEmulatorDestinations =
@@ -720,6 +725,17 @@ export function CloudSaveV2FileBrowserModal({
       <span>{t("cloud_save_v2_delete")}</span>
     </Button>
   ) : null;
+  const snapshotHistoryButton = (
+    <Button
+      theme="outline"
+      className="cloud-save-v2__snapshot-history-button"
+      disabled={actionsAreDisabled}
+      onClick={() => setIsSnapshotHistoryVisible(true)}
+    >
+      <ClockCounterClockwiseIcon size={16} />
+      <span>{t("cloud_save_v2_snapshot_history_open")}</span>
+    </Button>
+  );
 
   return (
     <>
@@ -755,6 +771,14 @@ export function CloudSaveV2FileBrowserModal({
               <Button theme="outline" onClick={onRetry}>
                 {t("cloud_save_v2_files_retry")}
               </Button>
+            </div>
+          )}
+
+          {!details && !isLoading && (
+            <div className="cloud-save-v2__browser-toolbar">
+              <div className="cloud-save-v2__browser-toolbar-actions">
+                {snapshotHistoryButton}
+              </div>
             </div>
           )}
 
@@ -907,6 +931,7 @@ export function CloudSaveV2FileBrowserModal({
 
                   {!isConflict && (
                     <div className="cloud-save-v2__browser-toolbar-actions">
+                      {snapshotHistoryButton}
                       {deleteCloudSaveButton}
                       {addCustomPathButton}
                     </div>
@@ -950,6 +975,7 @@ export function CloudSaveV2FileBrowserModal({
                           }
                         />
                       </div>
+                      {snapshotHistoryButton}
                       {deleteCloudSaveButton}
                     </div>
                   )}
@@ -1042,6 +1068,15 @@ export function CloudSaveV2FileBrowserModal({
         onClose={() => {
           if (!isDeletingCloudSave) setIsDeleteConfirmationVisible(false);
         }}
+      />
+
+      <CloudSaveV2SnapshotHistory
+        visible={isSnapshotHistoryVisible}
+        objectId={objectId}
+        shop={shop}
+        isGameRunning={isGameRunning}
+        onRestored={() => void onRetry()}
+        onClose={() => setIsSnapshotHistoryVisible(false)}
       />
     </>
   );

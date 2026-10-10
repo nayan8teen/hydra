@@ -52,6 +52,47 @@ describe("google drive snapshot write plan", () => {
     );
   });
 
+  it("recreates a missing head from an analyzed history snapshot", () => {
+    // The head manifest is the snapshot and is updated in place, so a missing
+    // head with an analyzed snapshot id means that id was a history version.
+    // Creating a new head continues the version sequence instead of failing.
+    assert.deepEqual(
+      planGoogleDriveSnapshotWrite({
+        head: null,
+        baseVersion: 6,
+        expectedSnapshotId: "history-file-6",
+      }),
+      {
+        kind: "write",
+        version: 7,
+        previousManifestFileId: null,
+        previousEtag: null,
+        previousSnapshotId: "history-file-6",
+      }
+    );
+  });
+
+  it("heals a head that is behind the analyzed history snapshot", () => {
+    // A head recreated at version 1 while history had advanced leaves the head
+    // older than the newest history. Analysis then reports the history version
+    // as the base; the commit must advance the existing head past it rather
+    // than conflict forever.
+    assert.deepEqual(
+      planGoogleDriveSnapshotWrite({
+        head: { fileId: "head-file", etag: "head-etag", version: 2 },
+        baseVersion: 5,
+        expectedSnapshotId: "history-file-5",
+      }),
+      {
+        kind: "write",
+        version: 6,
+        previousManifestFileId: "head-file",
+        previousEtag: "head-etag",
+        previousSnapshotId: "history-file-5",
+      }
+    );
+  });
+
   it("advances the head manifest and carries its etag for If-Match", () => {
     assert.deepEqual(
       planGoogleDriveSnapshotWrite({

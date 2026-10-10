@@ -1,4 +1,5 @@
 import type {
+  CloudSaveMergeResult,
   CloudSaveSyncAction,
   CloudSaveState,
   CloudSaveSyncTrigger,
@@ -39,6 +40,16 @@ export const getFirstSyncState = (
   return "untracked";
 };
 
+export interface RunFirstSyncOptions {
+  /**
+   * Resolved merge to use instead of `analysis.merge`. Required when a conflict
+   * resolution was applied: `analysis.merge` still carries the conflicts, so
+   * uploading or restoring from it would ignore the user's choice.
+   */
+  merge?: CloudSaveMergeResult;
+  mergedAggregateHash?: string;
+}
+
 export const runFirstSync = async (
   objectId: string,
   shop: GameShop,
@@ -46,11 +57,15 @@ export const runFirstSync = async (
   plannedAction: CloudSaveSyncAction,
   analysis: CloudSaveAnalysis,
   emitProgress: ProgressCallback,
-  assertEnvironmentCurrent?: () => Promise<void>
+  assertEnvironmentCurrent?: () => Promise<void>,
+  options?: RunFirstSyncOptions
 ): Promise<SyncOutcome> => {
   const initialState = "untracked";
   const remoteSnapshot = analysis.state.activeRemoteSnapshot;
   const action = plannedAction;
+  const merge = options?.merge ?? analysis.merge;
+  const mergedAggregateHash =
+    options?.mergedAggregateHash ?? analysis.mergedAggregateHash;
 
   if (action === "conflict") {
     return {
@@ -74,10 +89,10 @@ export const runFirstSync = async (
       {
         baseVersion: analysis.activeRemoteSnapshot?.version ?? 0,
         expectedSnapshotId: analysis.activeRemoteSnapshot?.id ?? null,
-        variants: analysis.merge.variants,
-        files: analysis.merge.files,
-        aggregateHash: analysis.mergedAggregateHash ?? undefined,
-        unresolvedRemoteEntryIds: analysis.merge.unresolvedRemoteEntryIds,
+        variants: merge.variants,
+        files: merge.files,
+        aggregateHash: mergedAggregateHash ?? undefined,
+        unresolvedRemoteEntryIds: merge.unresolvedRemoteEntryIds,
       },
       assertEnvironmentCurrent
     );
@@ -95,14 +110,14 @@ export const runFirstSync = async (
   }
 
   if (action === "restore" && remoteSnapshot) {
-    const restoreEntryIds = analysis.merge.restoreEntryIds;
+    const restoreEntryIds = merge.restoreEntryIds;
     const restored = await restoreRemoteState(
       objectId,
       shop,
       remoteSnapshot,
       analysis.localSnapshotContext,
       emitProgress,
-      ...firstSyncRestoreArguments(analysis, assertEnvironmentCurrent)
+      ...firstSyncRestoreArguments(merge, assertEnvironmentCurrent)
     );
     return {
       result: {

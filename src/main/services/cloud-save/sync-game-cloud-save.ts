@@ -12,6 +12,7 @@ import type {
 
 import { buildCloudSaveAggregateHash } from "./snapshot-aggregate-hash";
 import { isGameRunning } from "../game-running-state";
+import { logger } from "../logger";
 import { analyzeCloudSaveState } from "./analyze-cloud-save-state";
 import { assertCloudSaveRuntimeAvailable } from "./assert-cloud-save-executable";
 import { clearCloudSaveLocalState } from "./clear-cloud-save-local-state";
@@ -332,6 +333,7 @@ const executeRemoteSnapshotDeletionSync = async ({
         await deleteLocalSaveTargets(
           analysis.localSnapshotContext,
           deleteLocalEntryIds,
+          "keep-remote",
           assertEnvironmentCurrent
         );
       }
@@ -438,6 +440,7 @@ const executeRestoreOnlySync = async ({
     await deleteLocalSaveTargets(
       analysis.localSnapshotContext,
       deleteLocalIds,
+      "keep-remote",
       assertEnvironmentCurrent
     );
   }
@@ -607,6 +610,7 @@ const executeAppliedSync = async ({
     await deleteLocalSaveTargets(
       analysis.localSnapshotContext,
       deleteLocalIds,
+      "keep-remote",
       assertEnvironmentCurrent
     );
   }
@@ -771,10 +775,26 @@ const executeGameCloudSaveSync = async ({
       analysis.remoteManifest?.customPathRawPaths ?? []
     );
   const firstSyncState = getFirstSyncState(analysis);
+  // A conflict resolution was applied to the merge above. For a game without a
+  // sync anchor the first-sync state is computed from the aggregate hashes and
+  // always reports "conflict"; the planner must see the user's choice instead
+  // of re-reporting a conflict that could never be resolved.
+  const appliedResolution =
+    resolution &&
+    analysis.merge.conflicts.length > 0 &&
+    merge.conflicts.length === 0
+      ? resolution
+      : undefined;
+  const effectiveFirstSyncState =
+    firstSyncState === "conflict" && appliedResolution
+      ? appliedResolution === "keep-local"
+        ? "local-ahead"
+        : "remote-ahead"
+      : firstSyncState;
   const syncPlan = planCloudSaveSync({
     trigger,
     initialState,
-    firstSyncState,
+    firstSyncState: effectiveFirstSyncState,
     gameRunning: isGameRunning(objectId, shop),
     hasLocalFiles:
       analysis.localSnapshot.files.length > 0 ||
@@ -794,7 +814,7 @@ const executeGameCloudSaveSync = async ({
   }
   if (initialState === "untracked") {
     if (syncPlan.kind === "noop") {
-      if (firstSyncState === "synced") {
+      if (effectiveFirstSyncState === "synced") {
         await saveCurrentHeadAnchor(
           objectId,
           shop,
@@ -803,7 +823,7 @@ const executeGameCloudSaveSync = async ({
           assertEnvironmentCurrent
         );
       }
-      return finish("none", firstSyncState);
+      return finish("none", effectiveFirstSyncState);
     }
     const outcome = await runFirstSync(
       objectId,
@@ -812,7 +832,8 @@ const executeGameCloudSaveSync = async ({
       syncPlan.action,
       analysis,
       emitProgress,
-      assertEnvironmentCurrent
+      assertEnvironmentCurrent,
+      { merge, mergedAggregateHash: mergedAggregateHash ?? undefined }
     );
     if (outcome.result.action !== "conflict") {
       await confirmCloudSaveCustomPaths(
@@ -854,7 +875,26 @@ const executeGameCloudSaveSync = async ({
   }
 
   if (syncPlan.execution === "none") {
-    return finish("none", getPostSyncState(proposalChanged, merge.partial));
+    const finalState = getPostSyncState(proposalChanged, merge.partial);
+    // Local and cloud agree, so the cloud head is a valid base. Persisting it
+    // here keeps the anchor fresh and heals a game whose anchor was lost (for
+    // example after the install environment changed): without a base, the next
+    // ordinary local change could never be told apart from a remote one and
+    // would be reported as a conflict instead of a plain upload.
+    if (
+      finalState === "synced" &&
+      analysis.activeRemoteSnapshot &&
+      analysis.remoteManifest
+    ) {
+      await saveCurrentHeadAnchor(
+        objectId,
+        shop,
+        analysis,
+        merge.unresolvedRemoteEntryIds,
+        assertEnvironmentCurrent
+      );
+    }
+    return finish("none", finalState);
   }
 
   if (syncPlan.execution === "restore-only") {
@@ -1087,32 +1127,45 @@ export const resolveCloudSaveConflict = async (
   }
 
   const context = await getCloudSaveGameContext(objectId, shop);
-  return runCloudSaveOperation(
-    objectId,
-    shop,
-    `resolve:${resolution}:${context.environmentId}`,
-    async (emitProgress) => {
-      const game = await assertCloudSaveRuntimeAvailable(objectId, shop);
-      if (isGameRunning(objectId, shop)) {
-        throw new Error("cloud_save_game_running");
-      }
-      await prepareRetroArchSyncLayout(game);
-      const operationContext = await prepareRpcs3SyncContext(
-        objectId,
-        shop,
-        getEmulatorSaveProvider(game) === "rpcs3"
-          ? await getCloudSaveGameContext(objectId, shop)
-          : context
-      );
-      return runGameCloudSaveSync(
-        objectId,
-        shop,
-        "manual",
-        emitProgress,
-        resolution,
-        operationContext
-      );
-    },
-    onProgress
-  );
+  // Unlike the automatic-sync path, a manual resolution has no other error
+  // report: the IPC layer does not log thrown errors, so a failure here would
+  // otherwise surface only as a generic "could not be synchronized" toast.
+  try {
+    return await runCloudSaveOperation(
+      objectId,
+      shop,
+      `resolve:${resolution}:${context.environmentId}`,
+      async (emitProgress) => {
+        const game = await assertCloudSaveRuntimeAvailable(objectId, shop);
+        if (isGameRunning(objectId, shop)) {
+          throw new Error("cloud_save_game_running");
+        }
+        await prepareRetroArchSyncLayout(game);
+        const operationContext = await prepareRpcs3SyncContext(
+          objectId,
+          shop,
+          getEmulatorSaveProvider(game) === "rpcs3"
+            ? await getCloudSaveGameContext(objectId, shop)
+            : context
+        );
+        return runGameCloudSaveSync(
+          objectId,
+          shop,
+          "manual",
+          emitProgress,
+          resolution,
+          operationContext
+        );
+      },
+      onProgress
+    );
+  } catch (error) {
+    logger.error("[Cloud Save] Conflict resolution failed", {
+      objectId,
+      shop,
+      resolution,
+      error,
+    });
+    throw error;
+  }
 };

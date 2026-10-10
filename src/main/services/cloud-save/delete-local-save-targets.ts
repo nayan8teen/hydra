@@ -4,9 +4,18 @@ import { NativeAddon } from "../native-addon";
 import { logger } from "../logger";
 import { cloudSaveFileKey } from "./cloud-save-contract";
 
+/**
+ * Every local save deletion must be traceable to an explicit user decision:
+ * sync never removes local files on its own.
+ */
+export type DeleteLocalSaveTargetsReason =
+  | "keep-remote"
+  | "cloud-data-deletion";
+
 export const deleteLocalSaveTargets = async (
   context: LocalGameSnapshotContext,
   entryIds: string[],
+  reason: DeleteLocalSaveTargetsReason,
   assertEnvironmentCurrent?: () => Promise<void>,
   cleanupRootPaths: string[] = []
 ) => {
@@ -33,6 +42,14 @@ export const deleteLocalSaveTargets = async (
       cleanupFailureCount: 0,
     };
   }
+  if (reason !== "keep-remote" && reason !== "cloud-data-deletion") {
+    throw new Error("cloud_save_delete_reason_required");
+  }
+
+  logger.warn("[Cloud Save] Deleting local save files", {
+    reason,
+    fileCount: targets.length,
+  });
 
   await assertEnvironmentCurrent?.();
   const result = await NativeAddon.deleteLocalSaveTargets(

@@ -3,7 +3,6 @@ import type {
   CloudSaveState,
   GameShop,
 } from "@types";
-import { logger } from "@main/services/logger";
 
 import { buildCloudSaveAggregateHash } from "./snapshot-aggregate-hash";
 import { buildLocalGameSnapshotContext } from "./build-local-game-snapshot";
@@ -17,18 +16,14 @@ import {
 } from "./custom-path-store";
 import { getInstallationOwnedCustomPathRawPaths } from "./installation-owned-custom-paths";
 import {
-  isEmulatorSaveRawPath,
   parseRetroArchGameRawPath,
   parseRetroArchSaveRawPath,
 } from "./emulator-provider-identity";
 import { getEmulatorSaveProvider } from "./emulator-save-provider";
 import { listRemoteGameSnapshots } from "./list-remote-game-snapshots";
 import { mergeUserVariantSnapshots } from "./merge-user-variant-snapshots";
-import { reconcileRemoteTargetObservations } from "./reconcile-remote-target-observations";
-import {
-  getRemoteSnapshotRestoreManifest,
-  resolveRestoreManifestTargets,
-} from "./resolve-remote-snapshot-targets";
+import { reconcileLocalSnapshotTargets } from "./reconcile-local-snapshot-targets";
+import { getRemoteSnapshotRestoreManifest } from "./resolve-remote-snapshot-targets";
 import {
   getCloudSaveSyncAnchor,
   getCloudSaveSyncAnchorForSnapshot,
@@ -50,12 +45,6 @@ interface AnalyzeCloudSaveStateOptions {
 const samePaths = (left: string[], right: string[]) =>
   left.length === right.length &&
   left.every((value, index) => value === right[index]);
-
-const isUnavailableRestoreEnvironment = (error: unknown) =>
-  error instanceof Error &&
-  (error.message === "cloud_save_restore_prefix_unresolved" ||
-    error.message === "cloud_save_restore_prefix_invalid" ||
-    error.message === "cloud_save_restore_profile_unresolved");
 
 export const analyzeCloudSaveState = async (
   objectId: string,
@@ -279,52 +268,16 @@ export const analyzeCloudSaveState = async (
       new Set(rpcs3SavedataTitleIds)
     );
   }
-  const restorableEmulatorEntryIds = new Set<string>();
-
   if (remoteManifest) {
-    const localEntryIds = new Set(
-      localSnapshotContext.files.map(cloudSaveFileKey)
-    );
-    const missingRemoteFiles = remoteManifest.files.filter(
-      (file) => !localEntryIds.has(cloudSaveFileKey(file))
-    );
-    if (missingRemoteFiles.length > 0) {
-      const usedVariantIds = new Set(
-        missingRemoteFiles.map((file) => file.variantId)
-      );
-      try {
-        const resolution = await resolveRestoreManifestTargets(
-          {
-            ...remoteManifest,
-            variants: remoteManifest.variants.filter((variant) =>
-              usedVariantIds.has(variant.variantId)
-            ),
-            files: missingRemoteFiles,
-          },
-          context.pathContext,
-          customPathBindings,
-          rpcs3SavedataTitleIds
-        );
-        for (const action of resolution.actions) {
-          if (isEmulatorSaveRawPath(action.rawPath)) {
-            restorableEmulatorEntryIds.add(cloudSaveFileKey(action));
-          }
-        }
-        localSnapshotContext = reconcileRemoteTargetObservations(
-          localSnapshotContext,
-          remoteManifest.variants,
-          missingRemoteFiles,
-          resolution,
-          buildCloudSaveAggregateHash
-        );
-      } catch (error) {
-        if (!isUnavailableRestoreEnvironment(error)) throw error;
-        logger.info(
-          "[Cloud Save] Skipping remote target observation without a usable restore environment",
-          { shop, objectId, error }
-        );
-      }
-    }
+    localSnapshotContext = await reconcileLocalSnapshotTargets({
+      objectId,
+      shop,
+      local: localSnapshotContext,
+      remoteManifest,
+      customPathBindings,
+      rpcs3SavedataTitleIds,
+      pathContext: context.pathContext,
+    });
   }
 
   const {
@@ -342,7 +295,6 @@ export const analyzeCloudSaveState = async (
     preserveLocalMissingRawPaths,
     preserveLocalMissingEntryIds,
     preserveCloudOnlyEntryIds,
-    restorableEmulatorEntryIds,
     treatLocalAsNewRawPaths: new Set(trackingState.pendingRawPaths),
   });
   const mergedCustomPathRawPaths = [
@@ -386,7 +338,6 @@ export const analyzeCloudSaveState = async (
     pendingCustomPathRawPaths: trackingState.pendingRawPaths,
     installationOwnedCustomPathRawPaths: [...preserveLocalMissingRawPaths],
     preserveCloudOnlyEntryIds: [...preserveCloudOnlyEntryIds],
-    restorableEmulatorEntryIds: [...restorableEmulatorEntryIds],
     localSnapshot,
     localSnapshotContext,
     environmentId,

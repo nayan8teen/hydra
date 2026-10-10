@@ -14,7 +14,6 @@ type ResolvableCloudSaveAnalysis = Pick<
   | "pendingCustomPathRawPaths"
   | "installationOwnedCustomPathRawPaths"
   | "preserveCloudOnlyEntryIds"
-  | "restorableEmulatorEntryIds"
 > & {
   remoteManifest: Pick<RemoteManifest, "variants" | "files"> | null;
 };
@@ -24,9 +23,10 @@ export const resolveAnalyzedCloudSaveMerge = (
   resolution?: CloudSaveConflictResolution
 ): CloudSaveMergeResult => {
   if (!resolution) return analysis.merge;
-  if (analysis.merge.conflicts.length === 0) {
-    throw new Error("cloud_save_conflict_no_longer_exists");
-  }
+  // The conflict may already be gone (for example another sync landed first).
+  // Resolving a conflict that no longer exists is a no-op, not a failure:
+  // proceed with the current merge instead of surfacing a sync error.
+  if (analysis.merge.conflicts.length === 0) return analysis.merge;
   const resolutions = new Map(
     analysis.merge.conflicts.map((conflict) => [conflict.entryId, resolution])
   );
@@ -44,6 +44,5 @@ export const resolveAnalyzedCloudSaveMerge = (
     preserveCloudOnlyEntryIds: new Set(
       analysis.preserveCloudOnlyEntryIds ?? []
     ),
-    restorableEmulatorEntryIds: new Set(analysis.restorableEmulatorEntryIds),
   });
 };

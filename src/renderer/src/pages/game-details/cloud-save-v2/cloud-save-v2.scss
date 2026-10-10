@@ -1101,6 +1101,110 @@
     text-align: center;
   }
 
+  &__snapshot-history {
+    display: flex;
+    flex-direction: column;
+    gap: calc(globals.$spacing-unit * 1.5);
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  &__snapshot-history-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: globals.$spacing-unit;
+    flex-wrap: wrap;
+  }
+
+  &__snapshot-version-list {
+    display: flex;
+    flex-direction: column;
+    gap: calc(globals.$spacing-unit / 2);
+  }
+
+  &__snapshot-version {
+    display: flex;
+    align-items: center;
+    gap: globals.$spacing-unit;
+    width: 100%;
+    padding: globals.$spacing-unit;
+    border: 1px solid globals.$border-color;
+    border-radius: 8px;
+    background: transparent;
+    color: globals.$body-color;
+    cursor: pointer;
+    text-align: left;
+
+    &--active {
+      border-color: var(--color-primary);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: globals.$disabled-opacity;
+    }
+  }
+
+  &__snapshot-version-copy {
+    display: flex;
+    flex-direction: column;
+    gap: calc(globals.$spacing-unit / 4);
+    min-width: 0;
+
+    strong {
+      font-size: 14px;
+    }
+
+    > span {
+      color: globals.$muted-color;
+      font-size: 11px;
+    }
+  }
+
+  &__snapshot-files {
+    display: flex;
+    flex-direction: column;
+    gap: calc(globals.$spacing-unit / 2);
+  }
+
+  &__snapshot-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: calc(globals.$spacing-unit / 2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  &__snapshot-file-row {
+    display: flex;
+    align-items: center;
+    gap: globals.$spacing-unit;
+    padding: calc(globals.$spacing-unit / 2) globals.$spacing-unit;
+    border: 1px solid globals.$border-color;
+    border-radius: 6px;
+
+    .checkbox-field {
+      flex-shrink: 0;
+    }
+  }
+
+  &__snapshot-file-path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: globals.$muted-color;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__snapshot-history-button {
+    white-space: nowrap;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     &__switch,
     &__switch-thumb,

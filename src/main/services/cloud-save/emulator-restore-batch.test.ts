@@ -253,12 +253,12 @@ describe("emulator restore batch", () => {
           remoteVariants: [{ variantId, kind: "default" }],
           remoteFiles: sample.files,
           base: null,
-          restorableEmulatorEntryIds: new Set(
-            safePlan.actions.map(cloudSaveFileKey)
-          ),
         });
+        // Routine sync never materializes cloud-only files: the restore is an
+        // explicit user choice, so the merge keeps them pending instead.
+        assert.deepEqual(selected.restoreEntryIds, []);
         assert.deepEqual(
-          selected.restoreEntryIds,
+          selected.unresolvedRemoteEntryIds,
           sample.files.map(cloudSaveFileKey).sort()
         );
         assert.deepEqual(selected.deleteRemoteEntryIds, []);

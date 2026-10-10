@@ -88,7 +88,7 @@ const anchor = (files: LocalGameSnapshotFile[]): CloudSaveSyncAnchor => ({
 });
 
 describe("remote snapshot deletion", () => {
-  it("deletes unchanged automatic saves and conflicts on changed or new saves", () => {
+  it("requires explicit keep-remote before deleting local files", () => {
     const unchanged = file("unchanged.sav", hash("1"));
     const modified = file("modified.sav", hash("2"));
     const added = file("added.sav", hash("3"));
@@ -125,7 +125,7 @@ describe("remote snapshot deletion", () => {
     });
   });
 
-  it("preserves custom identities and automatic identities inside custom roots", () => {
+  it("requires an explicit choice before deleting unchanged automatic saves", () => {
     const customRawPath = "<custom><windows><absolute>C:/Saves/Celeste";
     const custom = file("custom.sav", hash("1"), customRawPath);
     const overlappingAutomatic = file("overlap.sav", hash("2"));
@@ -155,21 +155,20 @@ describe("remote snapshot deletion", () => {
 
     assert.deepEqual(plan.automaticEntryIds, [cloudSaveFileKey(automatic)]);
     assert.deepEqual(decideRemoteSnapshotDeletion(plan), {
+      kind: "conflict",
+    });
+    assert.deepEqual(decideRemoteSnapshotDeletion(plan, "keep-remote"), {
       kind: "accept",
       deleteLocalEntryIds: [cloudSaveFileKey(automatic)],
     });
   });
 
   it("does not accept a stale conflict resolution", () => {
-    const unchanged = file("unchanged.sav", hash("1"));
-    const plan = buildRemoteSnapshotDeletionPlan(
-      context(
-        [unchanged],
-        ["C:\\Users\\Hydra\\AppData\\Roaming\\Game\\unchanged.sav"]
-      ),
-      anchor([unchanged]),
-      { ready: [], unresolved: [] }
-    );
+    const plan: Parameters<typeof decideRemoteSnapshotDeletion>[0] = {
+      automaticEntryIds: [],
+      unchangedAutomaticEntryIds: [],
+      conflictingAutomaticEntryIds: [],
+    };
 
     assert.throws(
       () => decideRemoteSnapshotDeletion(plan, "keep-local"),
@@ -177,27 +176,21 @@ describe("remote snapshot deletion", () => {
     );
   });
 
-  it("accepts a remote deletion with no automatic files without proposing an empty upload", () => {
+  it("still requires an explicit choice when the remote head disappears", () => {
     const customRawPath = "<custom><windows><absolute>C:/Saves/Celeste";
     const custom = file("custom.sav", hash("1"), customRawPath);
     const plan = buildRemoteSnapshotDeletionPlan(
       context([custom], ["C:\\Saves\\Celeste\\custom.sav"]),
       anchor([custom]),
-      {
-        ready: [
-          {
-            rawPath: customRawPath,
-            path: "C:\\Saves\\Celeste",
-            platform: "windows",
-          },
-        ],
-        unresolved: [],
-      }
+      { ready: [], unresolved: [] }
     );
 
     assert.deepEqual(decideRemoteSnapshotDeletion(plan), {
-      kind: "accept",
-      deleteLocalEntryIds: [],
+      kind: "conflict",
+    });
+    assert.deepEqual(decideRemoteSnapshotDeletion(plan, "keep-local"), {
+      kind: "upload",
+      uploadEntryIds: plan.automaticEntryIds,
     });
   });
 });

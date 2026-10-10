@@ -1,14 +1,15 @@
-import type { analyzeCloudSaveState } from "../analyze-cloud-save-state.js";
-
-type Analysis = Awaited<ReturnType<typeof analyzeCloudSaveState>>;
+import type { CloudSaveMergeResult } from "@types";
 
 export const firstSyncRestoreArguments = (
-  analysis: Pick<Analysis, "merge">,
+  merge: Pick<
+    CloudSaveMergeResult,
+    "restoreEntryIds" | "unresolvedRemoteEntryIds"
+  >,
   assertEnvironmentCurrent?: () => Promise<void>
 ) =>
   [
-    analysis.merge.restoreEntryIds,
+    merge.restoreEntryIds,
     true,
-    analysis.merge.unresolvedRemoteEntryIds,
+    merge.unresolvedRemoteEntryIds,
     assertEnvironmentCurrent,
   ] as const;

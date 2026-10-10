@@ -332,6 +332,22 @@ export interface RemoteSnapshotSummary {
   provider?: CloudSaveRemoteProvider;
 }
 
+export interface CloudSaveHistorySnapshot extends RemoteSnapshotSummary {
+  isHead: boolean;
+}
+
+export interface CloudSaveSnapshotFiles {
+  snapshot: CloudSaveHistorySnapshot;
+  variants: SnapshotVariant[];
+  files: SnapshotFile[];
+}
+
+export interface CloudSaveSnapshotRestoreResult {
+  restoredFiles: number;
+  snapshot: CloudSaveHistorySnapshot;
+  headSnapshot: RemoteSnapshotSummary;
+}
+
 export type CloudSaveState =
   | "synced"
   | "partial"

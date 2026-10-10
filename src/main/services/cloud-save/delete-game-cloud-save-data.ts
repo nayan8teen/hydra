@@ -72,6 +72,7 @@ export const deleteGameCloudSaveData = async (
                   await deleteLocalSaveTargets(
                     analysis.localSnapshotContext,
                     localEntryIds,
+                    "cloud-data-deletion",
                     async () => {
                       assertGameNotRunning();
                       await assertCloudSaveEnvironmentCurrent(
