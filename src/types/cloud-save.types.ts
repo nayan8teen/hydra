@@ -481,11 +481,6 @@ export interface CloudSaveV2FileDetails {
     warningCodes: string[];
   }>;
   unresolvedRemoteVariantCount: number;
-  rpcs3Profile?: {
-    localProfileId: string;
-    cloudProfileIds: string[];
-    linkedCloudProfileId: string | null;
-  } | null;
 }
 
 export type CloudSaveSyncTrigger =
