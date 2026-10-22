@@ -50,7 +50,10 @@ import {
   registerCloudSaveCustomPaths,
 } from "./custom-path-store";
 import { inferCustomPathKind } from "./custom-path-kind";
-import { getEmulatorSaveProvider } from "./emulator-save-provider";
+import {
+  finalizeEmulatorRestore,
+  getEmulatorSaveProvider,
+} from "./emulator-save-provider";
 import { assertRestorePlanUnchanged } from "./emulator-restore-plan";
 import {
   bindCloudSaveCustomPathToLocalPath,
@@ -223,7 +226,7 @@ export const restoreRemoteSnapshot = async (
     throw new Error("Restore snapshot does not belong to the requested game");
   }
 
-  let resolvedGameContext = await getCloudSaveGameContext(
+  const resolvedGameContext = await getCloudSaveGameContext(
     gameId.objectId,
     gameId.shop
   );
@@ -250,22 +253,6 @@ export const restoreRemoteSnapshot = async (
   const manifest = migration?.manifest ?? originalManifest;
   const selectedFiles = selectRestoreFiles(manifest.files, requestedEntryIds);
   const selectedIds = new Set(selectedFiles.map(cloudSaveFileKey));
-  if (getEmulatorSaveProvider(resolvedGameContext.game) === "rpcs3") {
-    const { ensureRpcs3ProfileBindingForAnalysis } = await import(
-      "./rpcs3-save-provider"
-    );
-    if (
-      await ensureRpcs3ProfileBindingForAnalysis(
-        resolvedGameContext.game!,
-        selectedFiles
-      )
-    ) {
-      resolvedGameContext = await getCloudSaveGameContext(
-        gameId.objectId,
-        gameId.shop
-      );
-    }
-  }
   if (
     suppliedContext &&
     getEmulatorSaveProvider(resolvedGameContext.game) &&
@@ -372,6 +359,11 @@ export const restoreRemoteSnapshot = async (
     );
     emitProgress("applying_restore", 0, replacements.length);
     const result = await replaceRestoreTargets(replacements);
+    if (result.restoredFiles.length > 0) {
+      await finalizeEmulatorRestore(game, plan.actions).catch((error) =>
+        logger.warn("[Cloud Save] Emulator restore finalization failed", error)
+      );
+    }
     emitProgress("applying_restore", replacements.length, replacements.length);
     logger.info("[Cloud Save] Restore metadata applied", {
       restoredFiles: result.restoredFiles.length,

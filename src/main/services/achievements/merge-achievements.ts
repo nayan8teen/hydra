@@ -7,6 +7,11 @@ import type {
   User,
   UserPreferences,
 } from "@types";
+import {
+  achievementSyncCoordinator,
+  AchievementSyncCancelledError,
+} from "./achievement-sync-coordinator";
+import { toAchievementSyncEntry } from "./achievement-sync-worker";
 import { isAchievementSouvenirsEnabled } from "@shared";
 import { randomUUID } from "node:crypto";
 import { WindowManager } from "../window-manager";
@@ -41,7 +46,8 @@ const captureAchievementSouvenirs = async (
   newAchievements: UnlockedAchievement[],
   achievementsData: SteamAchievement[],
   userPreferences: UserPreferences,
-  publishNotification: boolean
+  publishNotification: boolean,
+  current: () => boolean
 ) => {
   if (
     !newAchievements.length ||
@@ -65,7 +71,7 @@ const captureAchievementSouvenirs = async (
     const owner = await db.get<string, User>(levelKeys.user, {
       valueEncoding: "json",
     });
-    if (!owner?.id) return null;
+    if (!current() || !owner?.id) return null;
 
     const primaryAchievement = newAchievements[0];
     const displayName =
@@ -118,14 +124,11 @@ const captureAchievementSouvenirs = async (
       gameKey,
       screenshotPath,
       capturedAt,
-      achievements: newAchievements.map((achievement) => ({
-        name: achievement.name,
-        unlockTime: achievement.unlockTime,
-        ...(achievement.hardcoreUnlockTime != null && { hardcore: true }),
-      })),
+      achievements: newAchievements.map(toAchievementSyncEntry),
       status: "pending" as const,
       attemptCount: 0,
     };
+    if (!current()) throw new Error("achievement-sync-context-changed");
     await PendingGroupedSouvenirStore.put(pending);
     return pending;
   } catch (error) {
@@ -146,7 +149,8 @@ const saveAchievementsInMemory = async (
   objectId: string,
   shop: GameShop,
   unlockedAchievements: UnlockedAchievement[],
-  sendUpdateEvent: boolean
+  sendUpdateEvent: boolean,
+  current: () => boolean = () => true
 ) => {
   const gameAchievement = AchievementMemoryStore.get(shop, objectId);
   AchievementMemoryStore.set(shop, objectId, {
@@ -158,8 +162,9 @@ const saveAchievementsInMemory = async (
 
   if (!sendUpdateEvent) return;
 
-  return getUnlockedAchievements(objectId, shop, true)
+  return getUnlockedAchievements(objectId, shop, true, current)
     .then((achievements) => {
+      if (!current()) return;
       WindowManager.mainWindow?.webContents.send(
         `on-update-achievements-${objectId}-${shop}`,
         achievements
@@ -265,10 +270,11 @@ const publishAchievementUnlockNotifications = ({
   }
 };
 
-export const mergeAchievements = async (
+const mergeAchievementsLocally = async (
   game: Game,
   achievements: UnlockedAchievement[],
-  publishNotification: boolean
+  publishNotification: boolean,
+  current: () => boolean
 ) => {
   const gameKey = levelKeys.game(game.shop, game.objectId);
 
@@ -284,10 +290,11 @@ export const mergeAchievements = async (
   );
 
   if (!localGameAchievement) {
-    await getGameAchievementData(game.objectId, game.shop, false);
+    await getGameAchievementData(game.objectId, game.shop, false, current);
     localGameAchievement = AchievementMemoryStore.get(game.shop, game.objectId);
   }
 
+  if (!current()) throw new Error("achievement-sync-context-changed");
   const achievementsData = localGameAchievement?.achievements ?? [];
   const unlockedAchievements = localGameAchievement?.unlockedAchievements ?? [];
 
@@ -326,9 +333,11 @@ export const mergeAchievements = async (
     newAchievements,
     achievementsData,
     userPreferences,
-    publishNotification
+    publishNotification,
+    current
   );
 
+  if (!current()) throw new Error("achievement-sync-context-changed");
   if (publishNotification) {
     publishAchievementUnlockNotifications({
       game,
@@ -342,11 +351,14 @@ export const mergeAchievements = async (
 
   const achievementsToSync = mergedLocalAchievements;
 
-  // Fork: unlocked achievements replicate through the user's Google Drive
-  // instead of the Hydra Cloud profile endpoint.
+  // FORK: unlocked achievements replicate through the user's Google Drive
+  // instead of the Hydra Cloud profile endpoint, so no achievementSyncWorker
+  // enqueue happens here. Upstream's context guards are kept around it.
   const shouldSyncWithDrive =
     (await GoogleDriveService.isSyncEnabled()) &&
     AchievementWatcherManager.hasFinishedPreSearch;
+
+  if (!current()) throw new Error("achievement-sync-context-changed");
 
   if (shouldSyncWithDrive) {
     try {
@@ -366,9 +378,11 @@ export const mergeAchievements = async (
         game.objectId,
         game.shop,
         syncedAchievements,
-        publishNotification
+        publishNotification,
+        current
       );
     } catch (error) {
+      if (!current()) throw new AchievementSyncCancelledError();
       AchievementWatcherManager.alreadySyncedGames.delete(gameKey);
       achievementsLogger.error(
         "Failed to reconcile achievements with Google Drive",
@@ -381,7 +395,8 @@ export const mergeAchievements = async (
         game.objectId,
         game.shop,
         achievementsToSync,
-        publishNotification
+        publishNotification,
+        current
       );
     }
   } else if (newAchievements.length) {
@@ -389,11 +404,31 @@ export const mergeAchievements = async (
       game.objectId,
       game.shop,
       achievementsToSync,
-      publishNotification
+      publishNotification,
+      current
     );
   }
 
   if (pendingGroupedSouvenir) void groupedSouvenirWorker.trigger();
 
   return newAchievements.length;
+};
+
+export const mergeAchievements = async (
+  game: Game,
+  achievements: UnlockedAchievement[],
+  publishNotification: boolean
+) => {
+  if (game.shop === "epic") return 0;
+  const context = HydraApi.getAuthContext();
+  const current = () =>
+    context
+      ? HydraApi.isAuthContextCurrent(context)
+      : HydraApi.getAuthContext() === null;
+  return achievementSyncCoordinator.runMerge(
+    levelKeys.game(game.shop, game.objectId),
+    (valid) =>
+      mergeAchievementsLocally(game, achievements, publishNotification, valid),
+    current
+  );
 };

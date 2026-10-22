@@ -6,7 +6,6 @@ import "./get-cloud-save-snapshot-files";
 import "./list-cloud-save-snapshots";
 import "./restore-cloud-save-snapshot";
 import "./get-rpcs3-disc-identity-status";
-import "./bind-rpcs3-cloud-save-profile";
 import "./get-game-backup-preview";
 import "./delete-game-cloud-save-data";
 import "./sync-all-cloud-saves";
