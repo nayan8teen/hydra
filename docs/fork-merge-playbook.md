@@ -83,10 +83,11 @@ git diff --name-only --diff-filter=U
 
 Upstream may re-add subscription handling or change `validateOptions`.
 **Fork rule:** keep `validateOptions` free of any `needsSubscription` gate. The
-fork deliberately removed `HydraApiOptions.needsSubscription`. If upstream
-re-adds it, keep the option in the type but do **not** re-introduce the gate in
-`validateOptions` (or keep it behind an explicit `FORK:` comment explaining it
-is unused).
+fork deliberately removed the gate from behaviour; since the 4.2.0 sync the
+option stays in `HydraApiOptions` (and in the preload bridge) because upstream
+call sites still pass it, but `validateOptions` only returns the auth
+generation and never throws `SubscriptionRequiredError`. Keep the `FORK:`
+comment that explains this.
 
 ### 4.2 `src/main/services/cloud-save/remote-backend.ts`
 
@@ -123,6 +124,16 @@ Upstream keeps unlocking achievements through
 later unlock time winning. The grouped-souvenir worker still talks to Hydra
 (see section 4.7), so do not delete `HydraApi` from `merge-achievements.ts`
 until then.
+
+Upstream also queues cloud uploads in `achievement-sync-worker.ts` from
+`mergeAchievements`. The fork keeps upstream's `achievementSyncCoordinator`
+context guards but **never enqueues** the Hydra worker there, so the worker
+stays dormant (only reset/view code still touches it). Upstream's
+`achievement-sync.test.ts` asserts that merge → Hydra PUT path; when merging,
+keep only the tests that exercise the coordinator/worker/reset/view code
+directly and add Drive-backed merge cases using the same esbuild fixture
+(the stub needs `GoogleDriveService.isSyncEnabled` and
+`syncGoogleDriveUnlockedAchievements`).
 
 ### 4.6 `src/main/services/emulators/emulation-cloud-saves.ts`
 
@@ -182,8 +193,16 @@ set -o pipefail
 /tmp/node-v20.19.5-win-x64/node.exe node_modules/eslint/bin/eslint.js <files>
 ```
 
-The ~26 pre-existing Windows environment failures documented in `AGENTS.md`
-(EBUSY/EPERM/binary-missing) are not regressions. Do not skip or weaken tests.
+The pre-existing Windows environment failures documented in `AGENTS.md`
+(EBUSY/EPERM/POSIX-path/binary-missing) are not regressions. Do not skip or
+weaken tests.
+
+Upstream's Epic/Legendary tests need the prepared runtime, which the postinstall
+step fetches:
+
+```bash
+/tmp/node-v20.19.5-win-x64/node.exe scripts/prepare-legendary.cjs
+```
 
 ## 7. Known hazards
 

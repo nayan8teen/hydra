@@ -364,13 +364,6 @@ export function CloudSaveV2Provider({
           .catch(() => setHasSyncError(true));
         return true;
       }
-      if (
-        typeof message === "string" &&
-        message.includes("cloud_save_rpcs3_profile_binding_required")
-      ) {
-        setIsFileBrowserVisible(true);
-        return true;
-      }
       const errorKind = getCloudSaveSyncErrorKind(error);
       if (errorKind === "generic") return false;
 
