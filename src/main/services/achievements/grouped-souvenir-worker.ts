@@ -1,7 +1,4 @@
-import {
-  achievementSyncCoordinator,
-  ACHIEVEMENT_SYNC_REQUEST_TIMEOUT_MS,
-} from "./achievement-sync-coordinator";
+import { achievementSyncCoordinator } from "./achievement-sync-coordinator";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 
@@ -61,7 +58,7 @@ import {
 } from "./grouped-souvenir-sync-status";
 import { getGameAchievementData } from "./get-game-achievement-data";
 import { reconcileAchievementMemory as reconcileMemory } from "./reconcile-achievement-memory";
-import { buildGroupedSouvenirSyncPayload } from "./grouped-souvenir-payload";
+import { syncGoogleDriveUnlockedAchievements } from "../google-drive/google-drive-achievements";
 import { buildAchievementSouvenirSyncItem } from "./grouped-souvenir-sync-item";
 
 const CONCURRENT_UPDATE_ATTEMPTS = 3;
@@ -291,18 +288,47 @@ const synchronizeAchievements = (
   pending: PendingAchievementSouvenir,
   achievements: PendingSouvenirAchievement[],
   includeSouvenir: boolean
-) => {
+): Promise<UpdatedUnlockedAchievements> => {
   const context = HydraApi.getAuthContext();
   if (context?.userId !== pending.ownerId)
     throw new Error("achievement-sync-context-changed");
+
   return achievementSyncCoordinator.runRequest(
     pending.gameKey,
-    () =>
-      HydraApi.put<UpdatedUnlockedAchievements>(
-        "/profile/games/achievements",
-        buildGroupedSouvenirSyncPayload(pending, achievements, includeSouvenir),
-        { authContext: context, timeout: ACHIEVEMENT_SYNC_REQUEST_TIMEOUT_MS }
-      ),
+    async () => {
+      const game = await gamesSublevel.get(pending.gameKey).catch(() => null);
+      if (!game) throw new Error(GAME_NOT_FOUND_ERROR_CODE);
+
+      // Fork: unlock records (and the souvenir key on them) live in the
+      // user's own Drive document instead of Hydra's achievements endpoint.
+      const local =
+        includeSouvenir && pending.imageKey
+          ? achievements.map((achievement) => ({
+              name: achievement.name,
+              unlockTime: achievement.unlockTime,
+              imageKey: pending.imageKey,
+            }))
+          : achievements;
+      const merged = await syncGoogleDriveUnlockedAchievements(
+        game.shop,
+        game.objectId,
+        local
+      );
+
+      return {
+        shop: game.shop,
+        objectId: game.objectId,
+        achievements: merged,
+        souvenirs: pending.imageKey
+          ? [
+              {
+                clientId: pending.clientId,
+                id: `${game.shop}:${game.objectId}:${pending.imageKey}`,
+              },
+            ]
+          : [],
+      };
+    },
     () => HydraApi.isAuthContextCurrent(context)
   );
 };
@@ -348,35 +374,19 @@ const synchronizePendingSouvenir = async (
 const authorizePendingSouvenir = async (
   attempted: PendingAchievementSouvenir
 ) => {
-  const { authorization, image } =
-    await AchievementImageService.authorizeAchievementImage(
-      attempted.screenshotPath,
-      attempted.remoteGameId,
-      attempted.clientId
-    );
+  if (attempted.imageKey && attempted.uploadedAt) return attempted;
 
-  const imageKeyChanged = authorization.imageKey !== attempted.imageKey;
+  // Fork: the image is a content-addressed Drive blob, so uploading it is the
+  // authorization step. The key is stable for the same bytes.
+  const imageKey = await AchievementImageService.uploadAchievementImage(
+    attempted.screenshotPath
+  );
   const authorized: PendingAchievementSouvenir = {
     ...attempted,
-    imageKey: authorization.imageKey,
-    ...(imageKeyChanged && { uploadedAt: undefined }),
+    imageKey,
+    uploadedAt: Date.now(),
   };
   await PendingGroupedSouvenirStore.put(authorized);
-
-  if (
-    !authorized.uploadedAt &&
-    authorization.status === "pending" &&
-    authorization.presignedUrl
-  ) {
-    await AchievementImageService.uploadAuthorizedAchievementImage(
-      authorization.presignedUrl,
-      image
-    );
-    authorized.uploadedAt = Date.now();
-    await PendingGroupedSouvenirStore.put(authorized);
-  } else if (!authorized.uploadedAt && authorization.status === "pending") {
-    throw new Error("Souvenir upload authorization has no upload URL");
-  }
 
   return authorized;
 };
@@ -634,12 +644,9 @@ const persistGroupedSouvenirFailure = async (
   });
 };
 
-const getSubscriptionExpiryAtAttempt = async (ownerId: string) => {
-  const user = await getCurrentUser().catch(() => null);
-  if (user?.id !== ownerId) return null;
-  const expiresAt = new Date(user.subscription?.expiresAt ?? 0).getTime();
-  return Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : null;
-};
+// Fork: souvenirs are stored in the user's Drive, so there is no Hydra Cloud
+// subscription to pause on anymore.
+const getSubscriptionExpiryAtAttempt = async (_ownerId: string) => null;
 
 const processPendingSouvenir = async (
   pending: PendingAchievementSouvenir
@@ -912,30 +919,11 @@ export const retryAchievementSouvenirSync =
     );
 
     try {
-      let canResumeSubscription = false;
-      if (
-        souvenirs.some(
-          (souvenir) =>
-            souvenir.ownerId === ownerId && souvenir.status === "paused"
-        )
-      ) {
-        const { getUserData } = await import("../user/get-user-data");
-        const user = await getUserData({
-          allowCached: false,
-          triggerSouvenirSync: false,
-        });
-        canResumeSubscription =
-          user?.id === ownerId && HydraApi.hasActiveSubscription();
-      }
       await groupedSouvenirWorker.serializeQueueChanges(async () => {
         const souvenirs = await PendingGroupedSouvenirStore.list();
         if ((await getCurrentOwner()) !== ownerId) return;
         for (const souvenir of souvenirs) {
-          if (
-            souvenir.ownerId !== ownerId ||
-            souvenir.status === "terminal" ||
-            (souvenir.status === "paused" && !canResumeSubscription)
-          ) {
+          if (souvenir.ownerId !== ownerId || souvenir.status === "terminal") {
             continue;
           }
 

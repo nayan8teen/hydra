@@ -23,10 +23,8 @@ import { CloudSaveWidget } from "./cloud-save-v2";
 import { getCloudSaveVisibility } from "./cloud-save-visibility";
 import { SimilarGames } from "./similar-games/similar-games";
 
-import { AuthPage, getDisplayedPlayTimeInMilliseconds } from "@shared";
-import { cloudSyncContext, gameDetailsContext } from "@renderer/context";
-
-import cloudIconAnimated from "@renderer/assets/icons/cloud-animated.gif";
+import { getDisplayedPlayTimeInMilliseconds } from "@shared";
+import { gameDetailsContext } from "@renderer/context";
 import tvEffectVideo from "@renderer/assets/emulation/tv-effect.mp4";
 import { useUserDetails, useLibrary, useAppSelector } from "@renderer/hooks";
 import {
@@ -94,7 +92,6 @@ export function GameDetailsContent() {
   const { userDetails } = useUserDetails();
   const { library } = useLibrary();
 
-  const { getGameArtifacts } = useContext(cloudSyncContext);
   const cloudSaveVisibility = game
     ? getCloudSaveVisibility(game.shop, game.platform)
     : null;
@@ -223,24 +220,10 @@ export function GameDetailsContent() {
     };
   }, [aboutTheGame]);
 
-  const handleLegacyCloudSaveButtonClick = () => {
-    if (!userDetails) {
-      globalThis.window.electron.openAuthWindow(AuthPage.SignIn);
-      return;
-    }
-
-    setGameOptionsInitialCategory("hydra_cloud_legacy");
-    setShowGameOptionsModal(true);
-  };
-
   const handleEditGameClick = () => {
     setGameOptionsInitialCategory("assets");
     setShowGameOptionsModal(true);
   };
-
-  useEffect(() => {
-    getGameArtifacts();
-  }, [getGameArtifacts]);
 
   // Scroll to reviews section if reviews=true in URL
   useEffect(() => {
@@ -465,23 +448,6 @@ export function GameDetailsContent() {
                     title={t("edit_game_modal_button")}
                   >
                     <PencilIcon size={16} />
-                  </button>
-                )}
-
-                {game && cloudSaveVisibility?.hero === "legacy" && (
-                  <button
-                    type="button"
-                    className="game-details__cloud-sync-button"
-                    onClick={handleLegacyCloudSaveButtonClick}
-                  >
-                    <div className="game-details__cloud-icon-container">
-                      <img
-                        src={cloudIconAnimated}
-                        alt=""
-                        className="game-details__cloud-icon"
-                      />
-                    </div>
-                    {t("cloud_save_google_drive")}
                   </button>
                 )}
 

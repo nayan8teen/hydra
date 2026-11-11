@@ -1,23 +1,18 @@
 import axios from "axios";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
-import { gamesSublevel, levelKeys } from "@main/level";
 import type {
   LocalScreenshot,
   LocalScreenshotUploadOptions,
   ScreenshotModerationState,
-  ScreenshotPresignRequest,
-  ScreenshotPresignResponse,
-  ScreenshotTextModeration,
   ScreenshotQuality,
   ScreenshotUploadProgress,
 } from "@types";
 
-import {
-  normalizeScreenshotDescription,
-  resolveScreenshotUploadQuality,
-} from "@shared";
-import { GAME_NOT_FOUND_ERROR_CODE } from "../achievements/grouped-souvenir-retry-policy";
+import { normalizeScreenshotDescription } from "@shared";
+import { GoogleDriveService } from "../google-drive/google-drive-service";
+import { uploadGoogleDriveMedia } from "../google-drive/google-drive-media";
+import { saveGoogleDriveScreenshot } from "../google-drive/google-drive-screenshots";
 import type { HydraApiAuthContext } from "../hydra-auth-context";
 import { HydraApi } from "../hydra-api";
 import { logger } from "../logger";
@@ -37,21 +32,8 @@ import {
 } from "./screenshot-upload-retry-policy";
 
 const PROGRESS_THROTTLE_MS = 150;
-const REQUEST_TIMEOUT_MS = 30_000;
-const COMPLETE_TIMEOUT_MS = 45_000;
-const UPLOAD_TIMEOUT_MS = 5 * 60_000;
-const IMAGE_PROGRESS_SHARE = 0.9;
-const THUMBNAIL_PROGRESS_SHARE = 0.07;
 const MIN_SCHEDULED_RUN_DELAY_MS = 1_000;
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
-
-class UploadPutError extends Error {
-  constructor(cause: unknown) {
-    super("screenshot_upload_failed");
-    this.name = "UploadPutError";
-    this.cause = cause;
-  }
-}
 
 const MODERATION_STATUSES = new Set<string>(["PENDING", "APPROVED", "BLOCKED"]);
 
@@ -65,70 +47,6 @@ const isActiveUploadState = (state: LocalScreenshot["state"]) =>
 
 const emitProgress = (progress: ScreenshotUploadProgress) => {
   WindowManager.sendToAppWindows("on-screenshot-upload-progress", progress);
-};
-
-const buildPresignRequest = (
-  screenshot: LocalScreenshot,
-  uploadClientId: string,
-  quality: ScreenshotQuality,
-  image: { length: number; width: number; height: number },
-  thumbnailLength: number
-): ScreenshotPresignRequest => {
-  const isCustom = screenshot.shop === "custom";
-  const customGameTitle = screenshot.customGameTitle?.trim();
-  const description = normalizeScreenshotDescription(screenshot.description);
-
-  return {
-    clientId: uploadClientId,
-    quality,
-    imageLength: image.length,
-    thumbnailLength,
-    width: image.width,
-    height: image.height,
-    shop: screenshot.shop,
-    ...(isCustom || !screenshot.objectId
-      ? {}
-      : { objectId: screenshot.objectId }),
-    ...(isCustom && customGameTitle ? { customGameTitle } : {}),
-    ...(description ? { description } : {}),
-    capturedAt: screenshot.capturedAt,
-    isSpoiler: screenshot.isSpoiler,
-    visibility: screenshot.visibility,
-    ...(screenshot.commentsEnabled === false ? { commentsEnabled: false } : {}),
-  };
-};
-
-const putObject = async (
-  url: string,
-  body: Buffer,
-  signal: AbortSignal,
-  onProgress: (fraction: number) => void
-) => {
-  try {
-    await axios.put(url, body, {
-      headers: { "Content-Type": "image/jpeg" },
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      timeout: UPLOAD_TIMEOUT_MS,
-      signal,
-      onUploadProgress: (event) => {
-        const total = event.total ?? body.byteLength;
-        if (total > 0) onProgress(Math.min(1, event.loaded / total));
-      },
-    });
-  } catch (error) {
-    if (axios.isCancel(error)) throw error;
-    throw new UploadPutError(error);
-  }
-};
-
-const hasSyncedGame = async (screenshot: LocalScreenshot) => {
-  if (screenshot.shop === "custom" || !screenshot.objectId) return true;
-
-  const game = await gamesSublevel
-    .get(levelKeys.game(screenshot.shop, screenshot.objectId))
-    .catch(() => null);
-  return Boolean(game?.remoteId);
 };
 
 const getCurrentOwnerId = () => HydraApi.getAuthContext()?.userId ?? null;
@@ -212,13 +130,9 @@ class ScreenshotUploadWorker {
       return screenshot;
     }
 
-    const isRetryingStandardFallback =
-      screenshot.state === "failed" &&
-      screenshot.uploadQualityFallback === true &&
-      screenshot.uploadQuality === "STANDARD";
-    const quality = isRetryingStandardFallback
-      ? "STANDARD"
-      : resolveScreenshotUploadQuality(HydraApi.hasActiveSubscription());
+    // Fork: Drive storage has no upload tier limits, so captures always keep
+    // the 1080p tier that upstream paywalled behind Hydra Cloud.
+    const quality: ScreenshotQuality = "CLOUD";
     const isQualityChange =
       screenshot.uploadQuality != null && screenshot.uploadQuality !== quality;
     const updated = await LocalScreenshotStore.update(clientId, {
@@ -242,7 +156,7 @@ class ScreenshotUploadWorker {
       nextUploadAttemptAt: null,
       lastError: null,
       uploadQuality: quality,
-      uploadQualityFallback: isRetryingStandardFallback,
+      uploadQualityFallback: false,
       ...(isQualityChange ? { uploadClientId: randomUUID() } : {}),
     });
 
@@ -343,7 +257,7 @@ class ScreenshotUploadWorker {
     if ((screenshot.nextUploadAttemptAt ?? 0) <= Date.now()) {
       const current = await LocalScreenshotStore.get(screenshot.clientId);
       if (current?.state === "queued" && current.ownerId === ownerId) {
-        await this.process(current, authContext);
+        await this.process(current);
         await ScreenshotUploadNotifier.refresh();
       }
     }
@@ -368,6 +282,8 @@ class ScreenshotUploadWorker {
     this.uploadsDisabledThisRun = false;
     const ownerId = getCurrentOwnerId();
     if (!ownerId || !HydraApi.isLoggedIn()) return;
+    // Leave captures queued while Drive is disconnected instead of failing them.
+    if (!(await GoogleDriveService.isSyncEnabled())) return;
     const authContext = HydraApi.getAuthContext();
     if (!authContext) return;
 
@@ -385,17 +301,12 @@ class ScreenshotUploadWorker {
     await ScreenshotUploadNotifier.refresh();
   }
 
-  private async process(
-    screenshot: LocalScreenshot,
-    authContext: HydraApiAuthContext
-  ) {
+  private async process(screenshot: LocalScreenshot) {
     const { clientId } = screenshot;
     const controller = new AbortController();
     this.activeUpload = { clientId, controller };
 
-    const quality: ScreenshotQuality =
-      screenshot.uploadQuality ??
-      (HydraApi.hasActiveSubscription() ? "CLOUD" : "STANDARD");
+    const quality: ScreenshotQuality = "CLOUD";
     const uploadClientId = screenshot.uploadClientId ?? clientId;
     const attempt = (screenshot.uploadAttempts ?? 0) + 1;
 
@@ -427,28 +338,19 @@ class ScreenshotUploadWorker {
     reportProgress(0, true);
 
     try {
-      const screenshotId =
-        screenshot.pendingCompleteScreenshotId ??
-        (await this.uploadFiles(
-          screenshot,
-          uploadClientId,
-          quality,
-          authContext,
-          controller,
-          reportProgress
-        ));
-      reportProgress(IMAGE_PROGRESS_SHARE + THUMBNAIL_PROGRESS_SHARE, true);
-
-      const result = await HydraApi.post<ScreenshotModerationState>(
-        `/profile/screenshots/${encodeURIComponent(screenshotId)}/complete`,
-        undefined,
-        { authContext, signal: controller.signal, timeout: COMPLETE_TIMEOUT_MS }
+      await this.uploadToDrive(
+        screenshot,
+        uploadClientId,
+        quality,
+        controller,
+        reportProgress
       );
+      reportProgress(1, true);
 
       await this.markUploaded(clientId, {
-        id: screenshotId,
-        moderationStatus: result?.moderationStatus,
-        moderationReason: result?.moderationReason,
+        id: uploadClientId,
+        moderationStatus: "APPROVED",
+        moderationReason: null,
       });
       ScreenshotTelemetry.record("upload", "uploaded", quality);
     } catch (error) {
@@ -459,75 +361,52 @@ class ScreenshotUploadWorker {
     }
   }
 
-  private async uploadFiles(
+  private async uploadToDrive(
     screenshot: LocalScreenshot,
     uploadClientId: string,
     quality: ScreenshotQuality,
-    authContext: HydraApiAuthContext,
     controller: AbortController,
     reportProgress: (progress: number, force?: boolean) => void
   ) {
-    if (!(await hasSyncedGame(screenshot))) {
-      throw new Error(GAME_NOT_FOUND_ERROR_CODE);
-    }
-
     const original = await fs.promises.readFile(screenshot.path);
     const compressed = await compressScreenshotForUpload(original, quality);
     if (controller.signal.aborted) throw new axios.CanceledError();
 
-    const presign = await HydraApi.post<ScreenshotPresignResponse>(
-      "/presigned-urls/screenshot",
-      buildPresignRequest(
-        screenshot,
-        uploadClientId,
-        compressed.quality,
-        {
-          length: compressed.image.byteLength,
-          width: compressed.width,
-          height: compressed.height,
-        },
-        compressed.thumbnail.byteLength
-      ),
-      { authContext, signal: controller.signal, timeout: REQUEST_TIMEOUT_MS }
-    );
-    await this.applyTextModeration(screenshot.clientId, presign.textModeration);
+    reportProgress(0.1, true);
+    const imageKey = await uploadGoogleDriveMedia({
+      data: compressed.image,
+      extension: "jpg",
+    });
+    reportProgress(0.85, true);
+    const thumbnailKey = await uploadGoogleDriveMedia({
+      data: compressed.thumbnail,
+      extension: "jpg",
+    });
 
-    await putObject(
-      presign.presignedUrl,
-      compressed.image,
-      controller.signal,
-      (fraction) => reportProgress(fraction * IMAGE_PROGRESS_SHARE)
-    );
-    await putObject(
-      presign.thumbnailPresignedUrl,
-      compressed.thumbnail,
-      controller.signal,
-      (fraction) =>
-        reportProgress(
-          IMAGE_PROGRESS_SHARE + fraction * THUMBNAIL_PROGRESS_SHARE
-        )
-    );
+    await saveGoogleDriveScreenshot({
+      clientId: uploadClientId,
+      shop: screenshot.shop,
+      objectId: screenshot.objectId,
+      imageKey,
+      thumbnailKey,
+      width: compressed.width,
+      height: compressed.height,
+      capturedAt: screenshot.capturedAt,
+      uploadedAt: Date.now(),
+      quality: compressed.quality,
+      gameTitle: screenshot.gameTitle,
+      customGameTitle: screenshot.customGameTitle,
+      description: normalizeScreenshotDescription(screenshot.description),
+      isSpoiler: screenshot.isSpoiler,
+      visibility: screenshot.visibility,
+      commentsEnabled: screenshot.commentsEnabled !== false,
+    });
 
     await LocalScreenshotStore.update(screenshot.clientId, {
-      pendingCompleteScreenshotId: presign.id,
       moderationStatus: null,
       moderationReason: null,
       uploadQuality: compressed.quality,
     });
-    return presign.id;
-  }
-
-  private async applyTextModeration(
-    clientId: string,
-    textModeration: ScreenshotTextModeration | undefined
-  ) {
-    if (!textModeration) return;
-    await LocalScreenshotStore.update(clientId, (current) => ({
-      textModeration,
-      ...(textModeration.title === "hidden" && current.shop === "custom"
-        ? { customGameTitle: null }
-        : {}),
-    }));
   }
 
   private async markUploaded(

@@ -48,18 +48,24 @@ Replace Hydra Cloud with the user's own Google Drive:
       `hydraApiCall` IPC payload and every main call site - deleted: hydra-cloud modal, `use-subscription.ts`, `subscription-slice.ts`
       (removed from `store.ts`, `features/index.ts`, `app.tsx`) - every renderer consumer repointed to `useOpenGoogleDriveSettings()` /
       `useGoogleDriveConnection()` (`src/renderer/src/hooks/use-google-drive-connection.ts`)
+- [x] Screenshots — upload worker writes JPEG + thumbnail blobs to Drive and a
+      per-game `screenshots-*.json` document; local delete/forget also removes the
+      Drive entry. The 1080p (`CLOUD`) tier is always selectable and always used,
+      with no Hydra subscription check.
 - [x] Phase 3a — Drive-only cloud-save engine (`remote-backend.ts` returns
       `"hydra"` only for ineligible games; the Hydra prepare/commit branches are
       deleted)
 - [x] Phase 3b — button renamed to "Google Drive Save Sync"
       (`cloud_save_google_drive`) across the V2 widget, the legacy hero button and
       the presentation labels
-- [~] Phase 3c — the legacy Hydra artifact UI (`cloud-sync.context.tsx`,
-  `cloud-sync-panel.tsx`, `game-emulation-saves.tsx`, `get-game-backup-preview`,
-  `upload-save-game`, `download-game-artifact`, `delete-game-artifact`) still
-  exists. It is independent of the Drive engine now that emulation saves are
-  Drive-backed, so it can be retired, but the delete is a multi-file renderer
-  refactor and was left for a focused pass.
+- [~] Phase 3c — the desktop legacy Hydra artifact UI is retired: deleted
+  `cloud-sync.context.tsx`, `cloud-sync-panel.tsx`, `game-emulation-saves.tsx`,
+  `cloud-sync-files-modal`, `cloud-sync-rename-artifact-modal`,
+  `hydra-cloud-section.tsx`, `legacy-saves-section.tsx` / `legacy-save-card.tsx` /
+  `legacy-save-presentation.ts`, and their call sites. Remaining: the Big Picture
+  cloud tab still lists Hydra artifacts and the matching main-process artifact
+  IPC (`get-game-backup-preview`, `upload-save-game`, `download-game-artifact`,
+  `delete-game-artifact`) is still registered for it.
 - [x] Phase 4 base — `src/main/services/google-drive/google-drive-documents.ts`
       (JSON document store; `googleDriveGameDocumentName` naming helper) plus
       `google-drive-documents-instance.ts`. Tested against a fake Drive server.
@@ -67,19 +73,23 @@ Replace Hydra Cloud with the user's own Google Drive:
       `google-drive-achievements.ts` / `google-drive-achievements-merge.ts`;
       `merge-achievements.ts` writes via `syncGoogleDriveUnlockedAchievements`
       (gate: `GoogleDriveService.isSyncEnabled()`);
-      `get-achievement-souvenirs.ts` reads via `readGoogleDriveUnlockedAchievements`.
-      The souvenir image keys ride along on the unlock records; URL resolution is
-      still the pending 4b item.
+      `get-achievement-souvenirs.ts` reads via `readGoogleDriveUnlockedAchievements`
+      and resolves souvenir image keys to `local:` URLs via
+      `resolveGoogleDriveMediaUrl`.
 - [x] Phase 4d (emulation) — `emulation-cloud-saves.ts` is Drive-backed:
       an `emulation-saves.json` document plus content-addressed blobs. Public
       signatures unchanged, so every caller keeps working.
-- [ ] Phase 4b — souvenirs: the grouped-souvenir worker and
-      `achievement-image-service.ts` still upload via Hydra presigned URLs and the
-      renderer still needs a Drive image resolver. NOT DONE.
-- [ ] Phase 4c — custom artwork: `game-artwork-cloud.ts` still uses Hydra
-      presigned URLs; it is coupled to the library sync. NOT DONE.
-- [ ] Phase 4d (library/playtime) — `library-sync/merge-with-remote-games.ts`
-      and `upload-games-batch.ts` still fetch/write Hydra profile games. NOT DONE.
+- [x] Phase 4b — souvenirs: `achievement-image-service.ts` uploads a
+      content-addressed Drive blob; the grouped-souvenir worker writes the image
+      key through `syncGoogleDriveUnlockedAchievements` instead of
+      `PUT /profile/games/achievements`; the Hydra subscription gate is gone.
+      Souvenir acknowledgements use `<shop>:<objectId>:<imageKey>` ids so
+      deletion can clear the key from the Drive document.
+- [x] Phase 4c — custom artwork: `game-artwork-cloud.ts` stores uploads as
+      Drive blobs and SteamGridDB picks in `artwork.json`; `google-drive-artwork-restore.ts`
+      repopulates missing local artwork after setup/connect. No subscription gate.
+- [-] Phase 4d (library/playtime) — intentionally left on Hydra: library and
+  playtime are not paywalled, so they stay out of this migration.
 - [x] Phase 5 — `docs/fork-merge-playbook.md` (updated for Phases 3/4)
 - [x] Verification — both typechecks green. Full suite: 1082 pass / 26 fail /
       12 skip; all 26 failures are the pre-existing EBUSY/EPERM/binary-helper

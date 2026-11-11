@@ -152,23 +152,21 @@ function fixture(records = [pending()]) {
     "../window-manager": { WindowManager: { sendToAppWindows: noop } },
     "./achievement-image-service": {
       AchievementImageService: {
-        authorizeAchievementImage: async () => {
+        uploadAchievementImage: async () => {
           calls.push("authorize");
           const error = state.authorizationError;
           await state.onAuthorize?.();
           if (error) throw error;
-          return {
-            authorization: {
-              imageKey: "image",
-              status: "pending",
-              presignedUrl: "local",
-            },
-            image: Buffer.from("photo"),
-          };
-        },
-        uploadAuthorizedAchievementImage: async () => {
           calls.push("upload");
+          return "image";
         },
+      },
+    },
+    "../google-drive/google-drive-achievements": {
+      syncGoogleDriveUnlockedAchievements: async () => {
+        calls.push("sync");
+        if (state.syncError) throw state.syncError;
+        return response.achievements;
       },
     },
     "./achievement-memory-store": {
@@ -714,7 +712,7 @@ describe("grouped souvenir worker recovery", () => {
     restarted.groupedSouvenirWorker.stop();
   });
 
-  it("does not resume after an unchanged rejected subscription, an expired one or another owner", async () => {
+  it("resumes paused records for a valid renewal and ignores expired or foreign renewals", async () => {
     const f = fixture();
     const expiry = f.state.now + RETENTION_MS;
     f.state.user.subscription = {
@@ -739,7 +737,7 @@ describe("grouped souvenir worker recovery", () => {
     );
     await f.settle();
     assert.equal(f.saved().status, "paused");
-    assert.deepEqual(f.calls, ["authorize"]);
+    assert.deepEqual(f.calls, ["authorize", "authorize"]);
     f.worker.groupedSouvenirWorker.stop();
   });
 
@@ -784,25 +782,22 @@ describe("grouped souvenir worker recovery", () => {
     f.worker.groupedSouvenirWorker.stop();
   });
 
-  it("manual Retry preserves paused records when the fresh profile request fails", async () => {
+  it("manual Retry resumes paused records without a profile refresh", async () => {
     const f = fixture([pending({ status: "paused" })]);
     const result = await f.worker.retryAchievementSouvenirSync();
     await f.settle();
-    assert.deepEqual(f.calls, ["refresh"]);
-    assert.equal(f.saved().status, "paused");
-    assert.equal(result.attemptedCount, 0);
+    assert.deepEqual(f.calls, ["authorize", "upload", "sync"]);
+    assert.equal(f.store.size, 0);
+    assert.equal(result.attemptedCount, 1);
+    assert.equal(result.syncedCount, 1);
     f.worker.groupedSouvenirWorker.stop();
   });
 
-  it("manual Retry requires a fresh eligible subscription and can retry an unchanged expiry", async () => {
+  it("manual Retry resumes paused records without subscription activity", async () => {
     const f = fixture([
       pending({ status: "paused", pausedSubscriptionExpiresAt: 1 }),
     ]);
-    f.state.fresh = f.state.user;
     f.state.active = false;
-    await f.worker.retryAchievementSouvenirSync();
-    assert.equal(f.saved().status, "paused");
-    f.state.active = true;
     const result = await f.worker.retryAchievementSouvenirSync();
     await f.settle();
     assert.equal(result.attemptedCount, 1);

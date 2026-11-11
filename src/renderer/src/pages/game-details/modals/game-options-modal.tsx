@@ -27,12 +27,11 @@ import {
 import type {
   CreateSteamShortcutOptions,
   Game,
-  LegacySaveExportProgress,
   LibraryGame,
   ProtonVersion,
   ShortcutLocation,
 } from "@types";
-import { cloudSyncContext, gameDetailsContext } from "@renderer/context";
+import { gameDetailsContext } from "@renderer/context";
 import { DeleteGameModal } from "@renderer/pages/downloads/delete-game-modal";
 import {
   useAppSelector,
@@ -76,16 +75,11 @@ import { GeneralSettingsSection } from "./game-options-modal/general-section";
 import { CompatibilitySettingsSection } from "./game-options-modal/compatibility-section";
 import { DownloadsSettingsSection } from "./game-options-modal/downloads-section";
 import { DangerZoneSection } from "./game-options-modal/danger-zone-section";
-import { HydraCloudLegacySettingsSection } from "./game-options-modal/hydra-cloud-section";
 import { HydraCloudV2SettingsSection } from "./game-options-modal/hydra-cloud-v2-section";
 import { EpicCloudSettingsSection } from "./game-options-modal/epic-cloud-section";
 import type { GameSettingsCategoryId } from "./game-options-modal/types";
 import { CreateSteamShortcutModal } from "./create-steam-shortcut-modal";
-import {
-  getCloudSaveVisibility,
-  isLegacyCloudSaveSettingsAvailable,
-} from "../cloud-save-visibility";
-import { LegacySavesSection } from "./game-options-modal/legacy-saves-section";
+import { getCloudSaveVisibility } from "../cloud-save-visibility";
 import {
   getAvailableGameSettingsCategory,
   getCloudGameSettingsCategories,
@@ -156,9 +150,6 @@ export function GameOptionsModal({
   const [showChangePlaytimeModal, setShowChangePlaytimeModal] = useState(false);
   const [showResetPlaytimeModal, setShowResetPlaytimeModal] = useState(false);
   const [isDeletingAchievements, setIsDeletingAchievements] = useState(false);
-  const [automaticCloudSync, setAutomaticCloudSync] = useState(
-    game.automaticCloudSync ?? false
-  );
   const [creatingSteamShortcut, setCreatingSteamShortcut] = useState(false);
   const [saveFolderPath, setSaveFolderPath] = useState<string | null>(null);
   const [loadingSaveFolder, setLoadingSaveFolder] = useState(false);
@@ -187,87 +178,10 @@ export function GameOptionsModal({
   >(null);
   const [showSteamShortcutModal, setShowSteamShortcutModal] = useState(false);
   const [steamShortcutExists, setSteamShortcutExists] = useState(false);
-  const [downloadingLegacySaveArtifactId, setDownloadingLegacySaveArtifactId] =
-    useState<string | null>(null);
-  const [legacySaveDownloadProgress, setLegacySaveDownloadProgress] =
-    useState<LegacySaveExportProgress | null>(null);
-  const legacySaveExportInProgressRef = useRef(false);
-  const cancelLegacySaveExport = useCallback(() => {
-    if (!legacySaveExportInProgressRef.current) return;
-
-    void globalThis.window.electron
-      .cancelGameArtifactExport()
-      .catch((error) =>
-        logger.error("Failed to cancel legacy save export", error)
-      );
-  }, []);
-
-  const handleLegacySaveDownload = useCallback(
-    async (artifactId: string, suggestedName: string) => {
-      if (legacySaveExportInProgressRef.current) return;
-
-      legacySaveExportInProgressRef.current = true;
-      setDownloadingLegacySaveArtifactId(artifactId);
-      setLegacySaveDownloadProgress(null);
-
-      try {
-        const result = await globalThis.window.electron.exportGameArtifact(
-          artifactId,
-          suggestedName,
-          setLegacySaveDownloadProgress
-        );
-
-        if (result.status === "saved") {
-          showSuccessToast(t("legacy_save_download_success"));
-        } else if (result.status === "busy") {
-          showErrorToast(t("legacy_save_download_in_progress"));
-        }
-      } catch {
-        showErrorToast(t("legacy_save_download_failed"));
-      } finally {
-        legacySaveExportInProgressRef.current = false;
-        setDownloadingLegacySaveArtifactId(null);
-        setLegacySaveDownloadProgress(null);
-      }
-    },
-    [showErrorToast, showSuccessToast, t]
-  );
-
-  useEffect(() => {
-    if (!visible) cancelLegacySaveExport();
-  }, [cancelLegacySaveExport, visible]);
-
-  useEffect(
-    () => () => {
-      cancelLegacySaveExport();
-    },
-    [cancelLegacySaveExport]
-  );
-
-  useEffect(() => {
-    setAutomaticCloudSync(game.automaticCloudSync ?? false);
-  }, [game.automaticCloudSync]);
-
-  useEffect(
-    () =>
-      globalThis.window.electron.onCloudSaveAutomaticSyncModeChanged(
-        (event) => {
-          if (
-            event.gameId.objectId === game.objectId &&
-            event.gameId.shop === game.shop
-          ) {
-            setAutomaticCloudSync(event.mode === "legacy");
-          }
-        }
-      ),
-    [game.objectId, game.shop]
-  );
-
   const { removeGameInstaller, removeGameFromLibrary, isGameDeleting } =
     useDownload();
   const navigate = useNavigate();
   const { userDetails } = useUserDetails();
-  const { artifacts } = useContext(cloudSyncContext);
   const { isConnected: isGoogleDriveConnected } = useGoogleDriveConnection();
   const cloudSaveAccessAction = getCloudSaveAccessAction(
     isGoogleDriveConnected
@@ -277,11 +191,8 @@ export function GameOptionsModal({
     game.platform
   ).settings;
   const { showV2: showCloudSaveV2Settings, legacyPurpose } = cloudSaveSettings;
-  const showLegacyCloudSaveSettings = isLegacyCloudSaveSettingsAvailable(
-    cloudSaveSettings,
-    isGoogleDriveConnected,
-    artifacts.length
-  );
+  // Fork: the legacy Hydra artifact panel was retired with the Drive move.
+  const showLegacyCloudSaveSettings = false;
   const userPreferences = useAppSelector(
     (state) => state.userPreferences.value
   );
@@ -1203,25 +1114,6 @@ export function GameOptionsModal({
     }
   };
 
-  const handleToggleAutomaticCloudSync = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const enabled = event.target.checked;
-    setAutomaticCloudSync(enabled);
-
-    try {
-      await globalThis.window.electron.toggleAutomaticCloudSync(
-        game.shop,
-        game.objectId,
-        enabled
-      );
-    } catch {
-      setAutomaticCloudSync(!enabled);
-    } finally {
-      await updateGame();
-    }
-  };
-
   const handleToggleHydraPlaytimeEnabled = useCallback(
     async (enabled: boolean) => {
       try {
@@ -1368,7 +1260,6 @@ export function GameOptionsModal({
         visible={visible}
         title={presentation?.title ?? game.title}
         onClose={onClose}
-        onCloseStart={cancelLegacySaveExport}
         large={true}
         noContentPadding
       >
@@ -1419,15 +1310,6 @@ export function GameOptionsModal({
                 }
               />
             )}
-            {selectedCategory === "hydra_cloud_legacy" &&
-              showLegacyCloudSaveSettings &&
-              legacyPurpose === "active" && (
-                <HydraCloudLegacySettingsSection
-                  game={game}
-                  automaticCloudSync={automaticCloudSync}
-                  onToggleAutomaticCloudSync={handleToggleAutomaticCloudSync}
-                />
-              )}
             {visible &&
               selectedCategory === "epic_cloud" &&
               showEpicCloudSettings &&
@@ -1435,15 +1317,6 @@ export function GameOptionsModal({
                 <EpicCloudSettingsSection
                   game={epicGame}
                   isGameRunning={isGameRunning}
-                />
-              )}
-            {selectedCategory === "hydra_cloud_legacy" &&
-              showLegacyCloudSaveSettings &&
-              legacyPurpose === "archive" && (
-                <LegacySavesSection
-                  downloadingArtifactId={downloadingLegacySaveArtifactId}
-                  downloadProgress={legacySaveDownloadProgress}
-                  onDownload={handleLegacySaveDownload}
                 />
               )}
             {selectedCategory === "compatibility" &&

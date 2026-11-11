@@ -14,10 +14,19 @@ import {
 } from "./google-drive-settings.js";
 import { GoogleDriveStorage } from "./google-drive-storage.js";
 
+const restoreArtworkInBackground = () => {
+  void import("./google-drive-artwork-restore.js")
+    .then(({ restoreGoogleDriveArtwork }) => restoreGoogleDriveArtwork())
+    .catch((error) =>
+      logger.warn("Failed to restore artwork from Google Drive", error)
+    );
+};
+
 export class GoogleDriveService {
   /** Restores a persisted session on startup; never prompts the user. */
   static async setup() {
     await GoogleDriveAuth.setup();
+    restoreArtworkInBackground();
   }
 
   static getStatus(): Promise<GoogleDriveConnectionStatus> {
@@ -48,6 +57,7 @@ export class GoogleDriveService {
     const account = await GoogleDriveAuth.connect(clientId);
     GoogleDriveStorage.resetCache();
     googleDriveDocuments.resetCache();
+    restoreArtworkInBackground();
     return account;
   }
 

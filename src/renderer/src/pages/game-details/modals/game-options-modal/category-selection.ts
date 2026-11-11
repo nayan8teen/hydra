@@ -34,7 +34,7 @@ export const isEpicCloudSettingsAvailable = (
 
 export const getCloudGameSettingsCategories = (
   availability: GameSettingsCategoryAvailability,
-  legacyPurpose: "active" | "archive"
+  _legacyPurpose: "active" | "archive"
 ): GameSettingsCategoryId[] => {
   const categories: GameSettingsCategoryId[] = [];
   // FORK: the "sign-in" state no longer exists; cloud settings need Drive.
@@ -42,15 +42,8 @@ export const getCloudGameSettingsCategories = (
   if (showHydra && availability.showCloudSaveV2Settings) {
     categories.push("hydra_cloud");
   }
-  const showLegacy = showHydra && availability.showLegacyCloudSaveSettings;
-  if (showLegacy && legacyPurpose === "active") {
-    categories.push("hydra_cloud_legacy");
-  }
   if (availability.showEpicCloudSettings) {
     categories.push("epic_cloud");
-  }
-  if (showLegacy && legacyPurpose === "archive") {
-    categories.push("hydra_cloud_legacy");
   }
   return categories;
 };
