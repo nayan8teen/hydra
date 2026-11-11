@@ -10,13 +10,8 @@ import {
   SCREENSHOT_CUSTOM_GAME_TITLE_MAX_LENGTH,
   SCREENSHOT_VISIBILITY_OPTIONS,
 } from "@shared";
-import {
-  CheckboxField,
-  InlineEditField,
-  HydraCloudBadge,
-} from "@renderer/components";
-import { useFeature, useUserDetails } from "@renderer/hooks";
-import { useOpenGoogleDriveSettings } from "@renderer/hooks/use-google-drive-connection";
+import { CheckboxField, InlineEditField } from "@renderer/components";
+import { useFeature } from "@renderer/hooks";
 
 import {
   ReviewSegmentedControl,
@@ -52,8 +47,6 @@ export function ScreenshotReviewFields({
   onDraftCommit,
 }: Readonly<ScreenshotReviewFieldsProps>) {
   const { t } = useTranslation("screenshots_capture");
-  const { hasActiveSubscription } = useUserDetails();
-  const openGoogleDriveSettings = useOpenGoogleDriveSettings();
   const { isFeatureEnabled, Feature } = useFeature();
   const isCommentsEnabled = isFeatureEnabled(Feature.ScreenshotComments);
 
@@ -67,13 +60,7 @@ export function ScreenshotReviewFields({
       label: t(VISIBILITY_LABEL_KEYS[option]),
     }));
   const qualityOptions: ReviewSegmentedOption<ScreenshotQuality>[] = [
-    { value: "STANDARD", label: SCREENSHOT_QUALITY_LABELS.STANDARD },
-    {
-      value: "CLOUD",
-      label: SCREENSHOT_QUALITY_LABELS.CLOUD,
-      isLocked: true,
-      addon: <HydraCloudBadge />,
-    },
+    { value: "CLOUD", label: SCREENSHOT_QUALITY_LABELS.CLOUD },
   ];
 
   const handleDescriptionSave = (description: string) => {
@@ -86,10 +73,6 @@ export function ScreenshotReviewFields({
     onDraftChange({ ...draft, customGameTitle: customGameTitle.trim() });
     onDraftCommit?.();
     return true;
-  };
-
-  const handleQualityChange = (quality: ScreenshotQuality) => {
-    if (quality === "CLOUD") openGoogleDriveSettings();
   };
 
   return (
@@ -128,15 +111,13 @@ export function ScreenshotReviewFields({
         onChange={(visibility) => onDraftChange({ ...draft, visibility })}
       />
 
-      {!hasActiveSubscription && (
-        <ReviewSegmentedControl
-          label={t("upload_quality")}
-          options={qualityOptions}
-          value="STANDARD"
-          disabled={isFormDisabled}
-          onChange={handleQualityChange}
-        />
-      )}
+      <ReviewSegmentedControl
+        label={t("upload_quality")}
+        options={qualityOptions}
+        value="CLOUD"
+        disabled={isFormDisabled}
+        onChange={() => {}}
+      />
 
       <div className="screenshot-review-item__checkbox">
         <CheckboxField

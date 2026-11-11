@@ -10,6 +10,7 @@ import {
   readGoogleDriveUnlockedAchievements,
 } from "@main/services/google-drive";
 import { achievementsLogger } from "@main/services/logger";
+import { resolveGoogleDriveMediaUrl } from "@main/services/google-drive/google-drive-media";
 import { AchievementSouvenirStore } from "./achievement-souvenir-store";
 
 interface RemoteUserGameAchievements {
@@ -40,7 +41,24 @@ export const fetchRemoteUserGameAchievements = async (
     }
 
     const unlocks = await readGoogleDriveUnlockedAchievements(shop, objectId);
-    return { ...emptyRemoteUserGameAchievements(), unlocked: unlocks };
+    const souvenirs = new Map<string, string>();
+
+    await Promise.all(
+      unlocks.map(async (achievement) => {
+        if (!achievement.imageKey) return;
+
+        const url = await resolveGoogleDriveMediaUrl(
+          achievement.imageKey
+        ).catch(() => null);
+        if (url) souvenirs.set(achievement.name.toUpperCase(), url);
+      })
+    );
+
+    return {
+      ...emptyRemoteUserGameAchievements(),
+      unlocked: unlocks,
+      souvenirs,
+    };
   } catch (error) {
     achievementsLogger.error(
       "Failed to read unlocked achievements from Google Drive",

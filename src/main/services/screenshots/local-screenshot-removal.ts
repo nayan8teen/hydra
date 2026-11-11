@@ -5,6 +5,7 @@ import type { GameShop, LocalScreenshot } from "@types";
 
 import { logger } from "../logger";
 import { WindowManager } from "../window-manager";
+import { deleteGoogleDriveScreenshot } from "../google-drive/google-drive-screenshots";
 import {
   isLocalScreenshotFileForGame,
   isPublishedLocalScreenshot,
@@ -56,6 +57,19 @@ const getTombstoneScreenshotId = (screenshot: LocalScreenshot) => {
   return screenshot.pendingCompleteScreenshotId ?? null;
 };
 
+const removeDriveScreenshotCopy = async (screenshot: LocalScreenshot) => {
+  if (!screenshot.objectId) return;
+  if (screenshot.state !== "uploaded" && screenshot.state !== "deleted") return;
+
+  await deleteGoogleDriveScreenshot(
+    screenshot.shop,
+    screenshot.objectId,
+    screenshot.uploadClientId ?? screenshot.clientId
+  ).catch((error) => {
+    logger.error("Failed to delete a screenshot from Google Drive", error);
+  });
+};
+
 const removeLocalScreenshot = async (
   clientId: string,
   shouldDelete: (screenshot: LocalScreenshot) => boolean = () => true,
@@ -66,6 +80,7 @@ const removeLocalScreenshot = async (
   if (!shouldDelete(screenshot)) return false;
 
   screenshotUploadWorker.cancel(clientId);
+  await removeDriveScreenshotCopy(screenshot);
   await fs.promises.rm(screenshot.path, { force: true });
   await removeScreenshotPreview(screenshot.previewPath);
   const tombstoneScreenshotId = getTombstoneScreenshotId(screenshot);
@@ -219,6 +234,8 @@ const UNPUBLISHED_FIELDS: Partial<LocalScreenshot> = {
 };
 
 const forgetPublishedScreenshot = async (screenshot: LocalScreenshot) => {
+  await removeDriveScreenshotCopy(screenshot);
+
   const keepsFile =
     screenshot.state === "uploaded" && (await pathExists(screenshot.path));
 

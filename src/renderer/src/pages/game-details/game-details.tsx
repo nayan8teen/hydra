@@ -14,15 +14,12 @@ import { GameDetailsSkeleton } from "./game-details-skeleton";
 
 import { GameDetailsContent } from "./game-details-content";
 import {
-  CloudSyncContextConsumer,
-  CloudSyncContextProvider,
   GameDetailsContextConsumer,
   GameDetailsContextProvider,
 } from "@renderer/context";
 import { useDownload } from "@renderer/hooks";
 import { GameOptionsModal, RepacksModal } from "./modals";
 import { Downloader, getDownloadersForUri, getRepackUriParts } from "@shared";
-import { CloudSyncFilesModal } from "./cloud-sync-files-modal/cloud-sync-files-modal";
 import { CloudSaveV2Provider } from "./cloud-save-v2";
 import "./game-details.scss";
 import "./hero.scss";
@@ -150,78 +147,59 @@ export default function GameDetails() {
               objectId={game?.objectId ?? objectId!}
               shop={game?.shop ?? shop}
             >
-              <CloudSyncContextProvider
-                objectId={game?.objectId ?? objectId!}
-                shop={game?.shop ?? shop}
-              >
-                <CloudSyncContextConsumer>
-                  {({
-                    showCloudSyncFilesModal,
-                    setShowCloudSyncFilesModal,
-                  }) => (
-                    <>
-                      <CloudSyncFilesModal
-                        onClose={() => setShowCloudSyncFilesModal(false)}
-                        visible={showCloudSyncFilesModal}
+              <SkeletonTheme baseColor="#1c1c1c" highlightColor="#444">
+                {isLoading ? <GameDetailsSkeleton /> : <GameDetailsContent />}
+
+                <RepacksModal
+                  visible={showRepacksModal}
+                  startDownload={handleStartDownload}
+                  onClose={() => setShowRepacksModal(false)}
+                />
+
+                <ConfirmationModal
+                  visible={hasNSFWContentBlocked}
+                  onClose={handleNSFWContentRefuse}
+                  title={t("nsfw_content_title")}
+                  descriptionText={t("nsfw_content_description", {
+                    title: gameTitle,
+                  })}
+                  confirmButtonLabel={t("allow_nsfw_content")}
+                  cancelButtonLabel={t("refuse_nsfw_content")}
+                  onConfirm={() => setHasNSFWContentBlocked(false)}
+                  clickOutsideToClose={false}
+                />
+
+                {game && (
+                  <GameOptionsModal
+                    visible={showGameOptionsModal}
+                    game={game}
+                    onClose={() => {
+                      setShowGameOptionsModal(false);
+                      setGameOptionsInitialCategory("general");
+                    }}
+                    initialCategory={gameOptionsInitialCategory}
+                    onNavigateHome={() => navigate("/")}
+                  />
+                )}
+
+                {fromRandomizer && (
+                  <Button
+                    className="game-details__randomizer-button"
+                    onClick={handleRandomizerClick}
+                    theme="outline"
+                    disabled={!randomGame || randomizerLocked}
+                  >
+                    <div className="game-details__stars-icon-container">
+                      <img
+                        src={starsIconAnimated}
+                        alt=""
+                        className="game-details__stars-icon"
                       />
-                    </>
-                  )}
-                </CloudSyncContextConsumer>
-
-                <SkeletonTheme baseColor="#1c1c1c" highlightColor="#444">
-                  {isLoading ? <GameDetailsSkeleton /> : <GameDetailsContent />}
-
-                  <RepacksModal
-                    visible={showRepacksModal}
-                    startDownload={handleStartDownload}
-                    onClose={() => setShowRepacksModal(false)}
-                  />
-
-                  <ConfirmationModal
-                    visible={hasNSFWContentBlocked}
-                    onClose={handleNSFWContentRefuse}
-                    title={t("nsfw_content_title")}
-                    descriptionText={t("nsfw_content_description", {
-                      title: gameTitle,
-                    })}
-                    confirmButtonLabel={t("allow_nsfw_content")}
-                    cancelButtonLabel={t("refuse_nsfw_content")}
-                    onConfirm={() => setHasNSFWContentBlocked(false)}
-                    clickOutsideToClose={false}
-                  />
-
-                  {game && (
-                    <GameOptionsModal
-                      visible={showGameOptionsModal}
-                      game={game}
-                      onClose={() => {
-                        setShowGameOptionsModal(false);
-                        setGameOptionsInitialCategory("general");
-                      }}
-                      initialCategory={gameOptionsInitialCategory}
-                      onNavigateHome={() => navigate("/")}
-                    />
-                  )}
-
-                  {fromRandomizer && (
-                    <Button
-                      className="game-details__randomizer-button"
-                      onClick={handleRandomizerClick}
-                      theme="outline"
-                      disabled={!randomGame || randomizerLocked}
-                    >
-                      <div className="game-details__stars-icon-container">
-                        <img
-                          src={starsIconAnimated}
-                          alt=""
-                          className="game-details__stars-icon"
-                        />
-                      </div>
-                      {t("next_suggestion")}
-                    </Button>
-                  )}
-                </SkeletonTheme>
-              </CloudSyncContextProvider>
+                    </div>
+                    {t("next_suggestion")}
+                  </Button>
+                )}
+              </SkeletonTheme>
             </CloudSaveV2Provider>
           );
         }}

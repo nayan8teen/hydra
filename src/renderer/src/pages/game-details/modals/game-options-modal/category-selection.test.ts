@@ -139,14 +139,13 @@ describe("game options category selection", () => {
     assert.deepEqual(getCloudGameSettingsCategories(availability, "archive"), [
       "hydra_cloud",
       "epic_cloud",
-      "hydra_cloud_legacy",
     ]);
     assert.deepEqual(
       getCloudGameSettingsCategories(
         { ...availability, showCloudSaveV2Settings: false },
         "active"
       ),
-      ["hydra_cloud_legacy", "epic_cloud"]
+      ["epic_cloud"]
     );
     assert.deepEqual(
       getCloudGameSettingsCategories(
